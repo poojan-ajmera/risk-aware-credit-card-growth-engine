@@ -1,0 +1,2 @@
+total_customers,avg_credit_score,avg_utilization_rate,avg_default_probability,total_monthly_spend,avg_monthly_spend,total_monthly_risk_adjusted_profit,avg_risk_adjusted_profit,avg_expected_roi,scale_customers,test_customers,do_not_launch_customers,block_customers,campaign_eligible_rate,block_rate
+10000,673.89,0.3507,0.0224,30606820.39,3060.68,489641.43,48.96,7.5948,4085.0,1161.0,4505.0,249.0,0.5246,0.0249

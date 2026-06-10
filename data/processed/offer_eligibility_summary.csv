@@ -1,0 +1,20 @@
+recommended_action,offer_type,decision_status,customer_count,avg_monthly_spend,avg_utilization_rate,avg_default_probability,avg_risk_adjusted_profit,avg_expected_incremental_profit,avg_expected_roi
+Category Cashback Accelerator,3% Grocery/Dining Cashback,Do Not Launch,45,906.39,0.225,0.0104,3.02,-7.61,-1.6391
+Category Cashback Accelerator,3% Grocery/Dining Cashback,Scale,26,789.47,0.2348,0.0162,55.76,67.63,19.7312
+Category Cashback Accelerator,3% Grocery/Dining Cashback,Test,13,942.78,0.1967,0.0099,8.77,2.41,0.9162
+No Growth Offer,No Offer,Block,185,1866.61,0.5208,0.113,50.41,-71.56,-22.0911
+Payment Health Messaging,Financial Health Nudge,Test,254,2128.75,0.668,0.0698,129.98,101.62,31.1644
+Payment Health Messaging,Financial Health Nudge,Do Not Launch,213,2560.45,0.6717,0.0852,38.87,-99.88,-28.1022
+Payment Health Messaging,Financial Health Nudge,Block,64,1810.57,0.7258,0.22,18.39,-161.28,-54.395
+Premium Upgrade Offer,Travel Rewards Upgrade,Do Not Launch,589,6254.6,0.1269,0.0022,-18.81,-49.41,-8.0084
+Premium Upgrade Offer,Travel Rewards Upgrade,Scale,174,5451.84,0.2102,0.0029,76.72,97.63,19.3521
+Premium Upgrade Offer,Travel Rewards Upgrade,Test,21,5716.12,0.1439,0.0025,28.17,19.44,3.0048
+Reactivation Bonus,$50 Spend Reactivation Bonus,Do Not Launch,389,699.31,0.3188,0.0139,-4.55,-11.87,-2.7168
+Reactivation Bonus,$50 Spend Reactivation Bonus,Scale,368,592.4,0.393,0.0259,89.76,149.3,38.5103
+Reactivation Bonus,$50 Spend Reactivation Bonus,Test,47,925.9,0.1964,0.0051,7.3,5.08,1.1932
+Retention Loyalty Benefit,Statement Credit / Loyalty Perk,Scale,1573,3747.74,0.3407,0.0155,104.41,101.17,27.1178
+Retention Loyalty Benefit,Statement Credit / Loyalty Perk,Do Not Launch,1441,3634.36,0.3435,0.0153,7.32,-37.24,-8.5173
+Retention Loyalty Benefit,Statement Credit / Loyalty Perk,Test,385,3419.76,0.277,0.0125,37.15,11.48,2.6014
+Standard Engagement Offer,Standard Cashback Reminder,Scale,1944,2670.14,0.3674,0.0215,97.51,98.17,26.5148
+Standard Engagement Offer,Standard Cashback Reminder,Do Not Launch,1828,2662.72,0.3654,0.0193,5.05,-32.42,-8.0179
+Standard Engagement Offer,Standard Cashback Reminder,Test,441,2704.48,0.2727,0.0143,31.25,9.39,2.2181

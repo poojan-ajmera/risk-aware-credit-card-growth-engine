@@ -7,5 +7,10 @@ __pycache__/
 *.duckdb
 data/raw/*
 data/processed/*
-!data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/processed/customer_features.csv
+!data/processed/segment_summary.csv
+!data/processed/offer_eligibility_summary.csv
+!data/processed/portfolio_kpis.csv
+
+!data/raw/.gitkeep
