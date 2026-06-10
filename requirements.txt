@@ -1,0 +1,13 @@
+pandas
+numpy
+duckdb
+scikit-learn
+matplotlib
+plotly
+streamlit
+jupyter
+openpyxl
+python-dotenv
+shap
+mlflow
+tabulate
