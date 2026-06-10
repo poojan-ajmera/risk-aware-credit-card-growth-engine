@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from dash import Dash, Input, Output, dcc, html
 
 
@@ -85,7 +86,7 @@ def create_kpi_card(title: str, value: str, note: str, accent: str = "#2563eb") 
     )
 
 
-def create_chart_card(title: str, subtitle: str, figure) -> html.Div:
+def create_chart_card(title: str, subtitle: str, figure, graph_id: str | None = None) -> html.Div:
     return html.Div(
         children=[
             html.Div(
@@ -95,7 +96,7 @@ def create_chart_card(title: str, subtitle: str, figure) -> html.Div:
                 ],
                 style={"marginBottom": "10px"},
             ),
-            dcc.Graph(figure=figure, config={"displayModeBar": True}),
+            dcc.Graph(id=graph_id, figure=figure, config={"displayModeBar": True}),
         ],
         style={
             "backgroundColor": COLORS["card"],
@@ -487,6 +488,156 @@ for _, row in priority_table_display.iterrows():
 
 
 
+
+def create_filter_panel() -> html.Div:
+    segment_options = [
+        {"label": segment, "value": segment}
+        for segment in sorted(customer_features["customer_segment"].unique())
+    ]
+
+    decision_options = [
+        {"label": decision, "value": decision}
+        for decision in sorted(customer_features["decision_status"].unique())
+    ]
+
+    risk_options = [
+        {"label": risk, "value": risk}
+        for risk in sorted(customer_features["risk_band"].unique())
+    ]
+
+    action_options = [
+        {"label": action, "value": action}
+        for action in sorted(customer_features["recommended_action"].unique())
+    ]
+
+    dropdown_style = {
+        "fontSize": "14px",
+    }
+
+    label_style = {
+        "fontSize": "13px",
+        "fontWeight": "800",
+        "color": COLORS["text"],
+        "marginBottom": "6px",
+        "display": "block",
+    }
+
+    return html.Div(
+        children=[
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div(
+                                "Interactive Filters",
+                                style={
+                                    "fontSize": "13px",
+                                    "fontWeight": "900",
+                                    "textTransform": "uppercase",
+                                    "letterSpacing": "1px",
+                                    "color": COLORS["blue"],
+                                    "marginBottom": "6px",
+                                },
+                            ),
+                            html.H3(
+                                "Explore the portfolio by segment, risk, action, or decision",
+                                style={
+                                    "margin": "0",
+                                    "fontSize": "22px",
+                                    "fontWeight": "900",
+                                    "color": COLORS["text"],
+                                },
+                            ),
+                            html.P(
+                                "Use these filters to narrow the portfolio before reviewing strategy, guardrails, or campaign actions. Leave filters blank to view the full portfolio.",
+                                style={
+                                    "margin": "8px 0 0 0",
+                                    "fontSize": "14px",
+                                    "color": COLORS["muted"],
+                                    "lineHeight": "1.5",
+                                },
+                            ),
+                        ],
+                        style={"marginBottom": "18px"},
+                    ),
+
+                    html.Div(
+                        children=[
+                            html.Div(
+                                children=[
+                                    html.Label("Customer Segment", style=label_style),
+                                    dcc.Dropdown(
+                                        id="filter-segment",
+                                        options=segment_options,
+                                        multi=True,
+                                        placeholder="All segments",
+                                        style=dropdown_style,
+                                    ),
+                                ]
+                            ),
+                            html.Div(
+                                children=[
+                                    html.Label("Decision Status", style=label_style),
+                                    dcc.Dropdown(
+                                        id="filter-decision",
+                                        options=decision_options,
+                                        multi=True,
+                                        placeholder="All decisions",
+                                        style=dropdown_style,
+                                    ),
+                                ]
+                            ),
+                            html.Div(
+                                children=[
+                                    html.Label("Risk Band", style=label_style),
+                                    dcc.Dropdown(
+                                        id="filter-risk",
+                                        options=risk_options,
+                                        multi=True,
+                                        placeholder="All risk bands",
+                                        style=dropdown_style,
+                                    ),
+                                ]
+                            ),
+                            html.Div(
+                                children=[
+                                    html.Label("Recommended Action", style=label_style),
+                                    dcc.Dropdown(
+                                        id="filter-action",
+                                        options=action_options,
+                                        multi=True,
+                                        placeholder="All actions",
+                                        style=dropdown_style,
+                                    ),
+                                ]
+                            ),
+                        ],
+                        style={
+                            "display": "grid",
+                            "gridTemplateColumns": "repeat(4, 1fr)",
+                            "gap": "14px",
+                        },
+                    ),
+                ],
+                style={
+                    "backgroundColor": "#ffffff",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "20px",
+                    "padding": "22px",
+                    "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                },
+            ),
+
+            html.Div(
+                id="filtered-summary-output",
+                style={"marginTop": "16px"},
+            ),
+        ],
+        style={"marginBottom": "24px"},
+    )
+
+
+
 def create_small_metric_card(title: str, value: str, note: str, accent: str = "#2563eb") -> html.Div:
     return html.Div(
         children=[
@@ -810,6 +961,8 @@ app.layout = html.Div(
             },
         ),
 
+        create_filter_panel(),
+
         dcc.Tabs(
             children=[
                 dcc.Tab(
@@ -823,8 +976,8 @@ app.layout = html.Div(
                         ),
                         html.Div(
                             children=[
-                                create_chart_card("Decision Mix", "Share of customers assigned to Scale, Test, Do Not Launch, or Block.", decision_fig),
-                                create_chart_card("Decision Counts", "Volume behind each portfolio decision.", decision_bar_fig),
+                                create_chart_card("Decision Mix", "Share of customers assigned to Scale, Test, Do Not Launch, or Block.", decision_fig, "overview-decision-share"),
+                                create_chart_card("Decision Counts", "Volume behind each portfolio decision.", decision_bar_fig, "overview-decision-counts"),
                             ],
                             style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "18px", "marginTop": "22px"},
                         ),
@@ -845,13 +998,13 @@ app.layout = html.Div(
                         ),
                         html.Div(
                             children=[
-                                create_chart_card("Segment Size", "Customer concentration across the portfolio.", segment_count_fig),
-                                create_chart_card("Eligibility Rate", "Which segments have the highest share of Scale/Test decisions.", eligible_fig),
+                                create_chart_card("Segment Size", "Customer concentration across the portfolio.", segment_count_fig, "segment-size-chart"),
+                                create_chart_card("Eligibility Rate", "Which segments have the highest share of Scale/Test decisions.", eligible_fig, "segment-eligibility-chart"),
                             ],
                             style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "18px", "marginTop": "22px"},
                         ),
                         html.Div(style={"height": "18px"}),
-                        create_chart_card("Segment Decision Mix", "How Scale, Test, Do Not Launch, and Block decisions differ across customer segments.", segment_stack_fig),
+                        create_chart_card("Segment Decision Mix", "How Scale, Test, Do Not Launch, and Block decisions differ across customer segments.", segment_stack_fig, "segment-decision-mix-chart"),
                         html.Div(
                             children=[
                                 html.H3("Priority Segment Table", style={"margin": "0 0 14px 0", "fontSize": "20px", "fontWeight": "800"}),
@@ -884,8 +1037,8 @@ app.layout = html.Div(
                         ),
                         html.Div(
                             children=[
-                                create_chart_card("Recommended Action Mix", "How the engine assigns next-best-actions across the portfolio.", action_fig),
-                                create_chart_card("Offer Type Distribution", "The actual offer or treatment associated with each recommendation.", offer_fig),
+                                create_chart_card("Recommended Action Mix", "How the engine assigns next-best-actions across the portfolio.", action_fig, "offer-action-mix-chart"),
+                                create_chart_card("Offer Type Distribution", "The actual offer or treatment associated with each recommendation.", offer_fig, "offer-type-chart"),
                             ],
                             style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "18px", "marginTop": "22px"},
                         ),
@@ -914,13 +1067,13 @@ app.layout = html.Div(
                         ),
                         html.Div(
                             children=[
-                                create_chart_card("Risk Band Distribution", "Portfolio split by estimated risk band.", risk_fig),
-                                create_chart_card("High-Utilization Revolver Mix", "Decision mix for customers who may need extra guardrails.", high_utilization_fig),
+                                create_chart_card("Risk Band Distribution", "Portfolio split by estimated risk band.", risk_fig, "guardrail-risk-chart"),
+                                create_chart_card("High-Utilization Revolver Mix", "Decision mix for customers who may need extra guardrails.", high_utilization_fig, "guardrail-high-util-chart"),
                             ],
                             style={"display": "grid", "gridTemplateColumns": "0.95fr 1.05fr", "gap": "18px"},
                         ),
                         html.Div(style={"height": "18px"}),
-                        create_chart_card("Blocked Customers by Segment", "Where risk guardrails are triggered.", block_segment_fig),
+                        create_chart_card("Blocked Customers by Segment", "Where risk guardrails are triggered.", block_segment_fig, "guardrail-blocked-segment-chart"),
                         create_insight_card(
                             "Guardrail Interpretation",
                             "This section separates revenue potential from responsible growth. Some customers may generate interest income, but that does not mean they should receive aggressive spend or upgrade offers.",
@@ -971,6 +1124,74 @@ app.layout = html.Div(
         "color": COLORS["text"],
     },
 )
+
+
+
+
+
+def get_active_view_label(selected_segments, selected_decisions, selected_risks, selected_actions) -> str:
+    has_filters = any([selected_segments, selected_decisions, selected_risks, selected_actions])
+    return "Filtered View" if has_filters else "Full Portfolio View"
+
+
+def apply_view_label_to_figure(fig, view_label: str):
+    current_title = fig.layout.title.text if fig.layout.title.text else "Chart"
+
+    # Avoid stacking labels if callback fires multiple times
+    current_title = current_title.replace(" — Filtered View", "").replace(" — Full Portfolio View", "")
+
+    fig.update_layout(
+        title=f"{current_title} — {view_label}"
+    )
+    return fig
+
+
+
+@app.callback(
+    Output("overview-decision-share", "figure"),
+    Output("overview-decision-counts", "figure"),
+    Output("segment-size-chart", "figure"),
+    Output("segment-eligibility-chart", "figure"),
+    Output("segment-decision-mix-chart", "figure"),
+    Output("offer-action-mix-chart", "figure"),
+    Output("offer-type-chart", "figure"),
+    Output("guardrail-risk-chart", "figure"),
+    Output("guardrail-high-util-chart", "figure"),
+    Output("guardrail-blocked-segment-chart", "figure"),
+    Input("filter-segment", "value"),
+    Input("filter-decision", "value"),
+    Input("filter-risk", "value"),
+    Input("filter-action", "value"),
+)
+def update_filtered_charts(selected_segments, selected_decisions, selected_risks, selected_actions):
+    filtered = apply_global_filters(
+        selected_segments,
+        selected_decisions,
+        selected_risks,
+        selected_actions,
+    )
+
+    view_label = get_active_view_label(
+        selected_segments,
+        selected_decisions,
+        selected_risks,
+        selected_actions,
+    )
+
+    figures = (
+        build_decision_share_fig(filtered),
+        build_decision_count_fig(filtered),
+        build_segment_size_fig(filtered),
+        build_segment_eligibility_fig(filtered),
+        build_segment_decision_mix_fig(filtered),
+        build_action_mix_fig(filtered),
+        build_offer_type_fig(filtered),
+        build_risk_band_fig(filtered),
+        build_high_utilization_fig(filtered),
+        build_blocked_segment_fig(filtered),
+    )
+
+    return tuple(apply_view_label_to_figure(fig, view_label) for fig in figures)
 
 
 
@@ -1234,6 +1455,507 @@ def update_ab_test_planner(segment: str, baseline_rate_percent: float, lift_pp: 
                     "boxShadow": "0 6px 18px rgba(15, 23, 42, 0.05)",
                 },
             ),
+        ]
+    )
+
+
+
+
+
+def apply_global_filters(selected_segments, selected_decisions, selected_risks, selected_actions) -> pd.DataFrame:
+    filtered = customer_features.copy()
+
+    if selected_segments:
+        filtered = filtered[filtered["customer_segment"].isin(selected_segments)]
+
+    if selected_decisions:
+        filtered = filtered[filtered["decision_status"].isin(selected_decisions)]
+
+    if selected_risks:
+        filtered = filtered[filtered["risk_band"].isin(selected_risks)]
+
+    if selected_actions:
+        filtered = filtered[filtered["recommended_action"].isin(selected_actions)]
+
+    return filtered
+
+
+def empty_figure(title: str, message: str = "No customers match the selected filters"):
+    fig = go.Figure()
+    fig.add_annotation(
+        text=message,
+        x=0.5,
+        y=0.5,
+        showarrow=False,
+        font=dict(size=16, color="#6b7280"),
+    )
+    fig.update_layout(
+        title=title,
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        margin=dict(l=40, r=40, t=60, b=40),
+        font=dict(family="Arial", size=13, color="#1f2937"),
+    )
+    return fig
+
+
+def build_decision_share_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Decision Status Share")
+
+    counts = df["decision_status"].value_counts().reset_index()
+    counts.columns = ["decision_status", "customer_count"]
+
+    fig = px.pie(
+        counts,
+        names="decision_status",
+        values="customer_count",
+        hole=0.45,
+        title="Decision Status Share",
+        color="decision_status",
+        color_discrete_map=DECISION_COLOR_MAP,
+    )
+    fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        margin=dict(l=20, r=20, t=55, b=20),
+        font=dict(family="Arial", size=13, color="#1f2937"),
+        legend_title_text="Decision",
+    )
+    return fig
+
+
+def build_decision_count_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Decision Status Count")
+
+    counts = df["decision_status"].value_counts().reset_index()
+    counts.columns = ["decision_status", "customer_count"]
+
+    fig = px.bar(
+        counts,
+        x="decision_status",
+        y="customer_count",
+        text="customer_count",
+        title="Decision Status Count",
+        color="decision_status",
+        color_discrete_map=DECISION_COLOR_MAP,
+    )
+    fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+    fig.update_layout(
+        xaxis_title="Decision Status",
+        yaxis_title="Customer Count",
+        showlegend=False,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=40, r=30, t=55, b=40),
+        font=dict(family="Arial", size=13, color="#1f2937"),
+    )
+    return fig
+
+
+def build_segment_size_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Customer Count by Segment")
+
+    grouped = (
+        df.groupby("customer_segment", as_index=False)
+        .agg(customer_count=("customer_id", "count"))
+        .sort_values("customer_count", ascending=True)
+    )
+
+    fig = px.bar(
+        grouped,
+        x="customer_count",
+        y="customer_segment",
+        orientation="h",
+        text="customer_count",
+        title="Customer Count by Segment",
+    )
+    fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#2563eb")
+    fig.update_layout(
+        xaxis_title="Customer Count",
+        yaxis_title="Customer Segment",
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=40, r=30, t=55, b=40),
+        font=dict(family="Arial", size=13, color="#1f2937"),
+    )
+    return fig
+
+
+def build_segment_eligibility_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Campaign Eligible Rate by Segment")
+
+    grouped = (
+        df.groupby("customer_segment", as_index=False)
+        .agg(campaign_eligible_rate=("campaign_eligible_flag", "mean"))
+        .sort_values("campaign_eligible_rate", ascending=True)
+    )
+
+    fig = px.bar(
+        grouped,
+        x="campaign_eligible_rate",
+        y="customer_segment",
+        orientation="h",
+        text="campaign_eligible_rate",
+        title="Campaign Eligible Rate by Segment",
+    )
+    fig.update_traces(texttemplate="%{text:.1%}", textposition="outside", marker_color="#0ea5e9")
+    fig.update_layout(
+        xaxis_title="Eligible Rate",
+        yaxis_title="Customer Segment",
+        xaxis_tickformat=".0%",
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=40, r=30, t=55, b=40),
+        font=dict(family="Arial", size=13, color="#1f2937"),
+    )
+    return fig
+
+
+def build_segment_decision_mix_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Decision Mix by Segment")
+
+    grouped = (
+        df.groupby(["customer_segment", "decision_status"], as_index=False)
+        .agg(customer_count=("customer_id", "count"))
+    )
+
+    fig = px.bar(
+        grouped,
+        x="customer_segment",
+        y="customer_count",
+        color="decision_status",
+        title="Decision Mix by Segment",
+        color_discrete_map=DECISION_COLOR_MAP,
+    )
+    fig.update_layout(
+        xaxis_title="Customer Segment",
+        yaxis_title="Customer Count",
+        xaxis_tickangle=-25,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=40, r=30, t=55, b=110),
+        font=dict(family="Arial", size=13, color="#1f2937"),
+        legend_title_text="Decision",
+    )
+    return fig
+
+
+def build_action_mix_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Recommended Action Mix")
+
+    counts = df["recommended_action"].value_counts().reset_index()
+    counts.columns = ["recommended_action", "customer_count"]
+
+    fig = px.pie(
+        counts,
+        names="recommended_action",
+        values="customer_count",
+        hole=0.42,
+        title="Recommended Action Mix",
+    )
+    fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        margin=dict(l=20, r=20, t=55, b=20),
+        font=dict(family="Arial", size=13, color="#1f2937"),
+        legend_title_text="Action",
+    )
+    return fig
+
+
+def build_offer_type_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Offer Type Distribution")
+
+    counts = df["offer_type"].value_counts().reset_index()
+    counts.columns = ["offer_type", "customer_count"]
+
+    fig = px.bar(
+        counts.sort_values("customer_count", ascending=True),
+        x="customer_count",
+        y="offer_type",
+        orientation="h",
+        text="customer_count",
+        title="Offer Type Distribution",
+    )
+    fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#7c3aed")
+    fig.update_layout(
+        xaxis_title="Customer Count",
+        yaxis_title="Offer Type",
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=40, r=30, t=55, b=40),
+        font=dict(family="Arial", size=13, color="#1f2937"),
+    )
+    return fig
+
+
+def build_risk_band_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Risk Band Distribution")
+
+    counts = df["risk_band"].value_counts().reset_index()
+    counts.columns = ["risk_band", "customer_count"]
+
+    fig = px.pie(
+        counts,
+        names="risk_band",
+        values="customer_count",
+        hole=0.45,
+        title="Risk Band Distribution",
+        color="risk_band",
+        color_discrete_map=RISK_COLOR_MAP,
+    )
+    fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        margin=dict(l=20, r=20, t=55, b=20),
+        font=dict(family="Arial", size=13, color="#1f2937"),
+        legend_title_text="Risk Band",
+    )
+    return fig
+
+
+def build_high_utilization_fig(df: pd.DataFrame):
+    filtered = df[df["customer_segment"] == "High-Utilization Revolver"]
+
+    if filtered.empty:
+        return empty_figure(
+            "High-Utilization Revolver Decision Mix",
+            "No High-Utilization Revolver customers match the selected filters",
+        )
+
+    counts = filtered["decision_status"].value_counts().reset_index()
+    counts.columns = ["decision_status", "customer_count"]
+
+    fig = px.bar(
+        counts,
+        x="decision_status",
+        y="customer_count",
+        text="customer_count",
+        title="High-Utilization Revolver Decision Mix",
+        color="decision_status",
+        color_discrete_map=DECISION_COLOR_MAP,
+    )
+    fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+    fig.update_layout(
+        xaxis_title="Decision Status",
+        yaxis_title="Customer Count",
+        showlegend=False,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=40, r=30, t=55, b=40),
+        font=dict(family="Arial", size=13, color="#1f2937"),
+    )
+    return fig
+
+
+def build_blocked_segment_fig(df: pd.DataFrame):
+    filtered = df[df["decision_status"] == "Block"]
+
+    if filtered.empty:
+        return empty_figure(
+            "Blocked Customers by Segment",
+            "No blocked customers match the selected filters",
+        )
+
+    grouped = (
+        filtered.groupby("customer_segment", as_index=False)
+        .agg(blocked_customers=("customer_id", "count"))
+        .sort_values("blocked_customers", ascending=True)
+    )
+
+    fig = px.bar(
+        grouped,
+        x="blocked_customers",
+        y="customer_segment",
+        orientation="h",
+        text="blocked_customers",
+        title="Blocked Customers by Segment",
+    )
+    fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#dc2626")
+    fig.update_layout(
+        xaxis_title="Blocked Customers",
+        yaxis_title="Customer Segment",
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=40, r=30, t=55, b=40),
+        font=dict(family="Arial", size=13, color="#1f2937"),
+    )
+    return fig
+
+
+
+@app.callback(
+    Output("filtered-summary-output", "children"),
+    Input("filter-segment", "value"),
+    Input("filter-decision", "value"),
+    Input("filter-risk", "value"),
+    Input("filter-action", "value"),
+)
+def update_filtered_summary(selected_segments, selected_decisions, selected_risks, selected_actions):
+    filtered = customer_features.copy()
+
+    active_filters = []
+
+    if selected_segments:
+        filtered = filtered[filtered["customer_segment"].isin(selected_segments)]
+        active_filters.append("Segment: " + ", ".join(selected_segments))
+
+    if selected_decisions:
+        filtered = filtered[filtered["decision_status"].isin(selected_decisions)]
+        active_filters.append("Decision: " + ", ".join(selected_decisions))
+
+    if selected_risks:
+        filtered = filtered[filtered["risk_band"].isin(selected_risks)]
+        active_filters.append("Risk: " + ", ".join(selected_risks))
+
+    if selected_actions:
+        filtered = filtered[filtered["recommended_action"].isin(selected_actions)]
+        active_filters.append("Action: " + ", ".join(selected_actions))
+
+    customer_count = len(filtered)
+
+    if active_filters:
+        summary_title = "Filtered Portfolio Summary"
+        view_note = "Current view: " + " | ".join(active_filters)
+        view_badge = "Filtered View"
+        badge_color = "#2563eb"
+    else:
+        summary_title = "Full Portfolio Summary"
+        view_note = "Current view: All customers in the portfolio"
+        view_badge = "Full Portfolio View"
+        badge_color = "#16a34a"
+
+    if customer_count == 0:
+        return html.Div(
+            children=[
+                html.H4("No customers match the selected filters", style={"margin": "0 0 6px 0"}),
+                html.P(
+                    "Try removing one or more filters to expand the portfolio view.",
+                    style={"margin": "0", "color": COLORS["muted"]},
+                ),
+            ],
+            style={
+                "backgroundColor": "#fff7ed",
+                "border": "1px solid #fed7aa",
+                "borderRadius": "16px",
+                "padding": "18px",
+            },
+        )
+
+    total_spend = filtered["monthly_spend"].sum()
+    total_profit = filtered["risk_adjusted_profit"].sum()
+    avg_default_probability = filtered["default_probability"].mean()
+    eligible_rate = filtered["campaign_eligible_flag"].mean()
+    block_rate = (filtered["decision_status"] == "Block").mean()
+
+    return html.Div(
+        children=[
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div(
+                                summary_title,
+                                style={
+                                    "fontSize": "13px",
+                                    "fontWeight": "900",
+                                    "textTransform": "uppercase",
+                                    "letterSpacing": "1px",
+                                    "color": COLORS["blue"],
+                                },
+                            ),
+                            html.Div(
+                                view_badge,
+                                style={
+                                    "fontSize": "12px",
+                                    "fontWeight": "900",
+                                    "color": "white",
+                                    "backgroundColor": badge_color,
+                                    "borderRadius": "999px",
+                                    "padding": "6px 10px",
+                                },
+                            ),
+                        ],
+                        style={
+                            "display": "flex",
+                            "alignItems": "center",
+                            "justifyContent": "space-between",
+                            "marginBottom": "8px",
+                        },
+                    ),
+                    html.Div(
+                        view_note,
+                        style={
+                            "fontSize": "13px",
+                            "color": COLORS["muted"],
+                            "marginBottom": "14px",
+                            "lineHeight": "1.45",
+                        },
+                    ),
+                    html.Div(
+                        children=[
+                            create_small_metric_card(
+                                "Filtered Customers",
+                                f"{customer_count:,}",
+                                "Customers matching current filters",
+                                "#2563eb",
+                            ),
+                            create_small_metric_card(
+                                "Monthly Spend",
+                                f"${total_spend:,.0f}",
+                                "Spend from filtered customers",
+                                "#0ea5e9",
+                            ),
+                            create_small_metric_card(
+                                "Risk-Adjusted Profit",
+                                f"${total_profit:,.0f}",
+                                "Profit after expected credit loss",
+                                "#16a34a",
+                            ),
+                            create_small_metric_card(
+                                "Avg Default Probability",
+                                f"{avg_default_probability * 100:.2f}%",
+                                "Average risk level in filtered view",
+                                "#f97316",
+                            ),
+                            create_small_metric_card(
+                                "Eligible Rate",
+                                f"{eligible_rate * 100:.1f}%",
+                                "Share marked Scale or Test",
+                                "#7c3aed",
+                            ),
+                            create_small_metric_card(
+                                "Block Rate",
+                                f"{block_rate * 100:.1f}%",
+                                "Share blocked by guardrails",
+                                "#dc2626",
+                            ),
+                        ],
+                        style={
+                            "display": "grid",
+                            "gridTemplateColumns": "repeat(6, 1fr)",
+                            "gap": "12px",
+                        },
+                    ),
+                ],
+                style={
+                    "backgroundColor": "#ffffff",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "20px",
+                    "padding": "20px",
+                    "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                },
+            )
         ]
     )
 
