@@ -1,0 +1,1243 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pandas as pd
+import plotly.express as px
+from dash import Dash, Input, Output, dcc, html
+
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+FEATURES_PATH = BASE_DIR / "data" / "processed" / "customer_features.csv"
+SEGMENT_PATH = BASE_DIR / "data" / "processed" / "segment_summary.csv"
+PORTFOLIO_KPI_PATH = BASE_DIR / "data" / "processed" / "portfolio_kpis.csv"
+
+
+COLORS = {
+    "background": "#f5f7fb",
+    "card": "#ffffff",
+    "text": "#111827",
+    "muted": "#6b7280",
+    "border": "#e5e7eb",
+    "navy": "#111827",
+    "blue": "#2563eb",
+    "light_blue": "#eff6ff",
+    "orange_light": "#fff7ed",
+    "orange_border": "#fed7aa",
+}
+
+
+DECISION_COLOR_MAP = {
+    "Scale": "#16a34a",
+    "Test": "#2563eb",
+    "Do Not Launch": "#9ca3af",
+    "Block": "#dc2626",
+}
+
+
+RISK_COLOR_MAP = {
+    "Low Risk": "#16a34a",
+    "Moderate Risk": "#f59e0b",
+    "High Risk": "#f97316",
+    "Very High Risk": "#dc2626",
+}
+
+
+def load_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    customer_features = pd.read_csv(FEATURES_PATH)
+    segment_summary = pd.read_csv(SEGMENT_PATH)
+    portfolio_kpis = pd.read_csv(PORTFOLIO_KPI_PATH)
+    return customer_features, segment_summary, portfolio_kpis
+
+
+def format_currency(value: float) -> str:
+    return f"${value:,.0f}"
+
+
+def format_percent(value: float) -> str:
+    return f"{value * 100:.1f}%"
+
+
+def create_kpi_card(title: str, value: str, note: str, accent: str = "#2563eb") -> html.Div:
+    return html.Div(
+        children=[
+            html.Div(
+                style={
+                    "height": "4px",
+                    "width": "42px",
+                    "borderRadius": "999px",
+                    "backgroundColor": accent,
+                    "marginBottom": "14px",
+                }
+            ),
+            html.Div(title, style={"fontSize": "13px", "color": COLORS["muted"], "fontWeight": "700"}),
+            html.Div(value, style={"fontSize": "30px", "fontWeight": "800", "marginTop": "8px", "color": COLORS["text"]}),
+            html.Div(note, style={"fontSize": "13px", "color": COLORS["muted"], "marginTop": "8px", "lineHeight": "1.4"}),
+        ],
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "20px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+            "minHeight": "135px",
+        },
+    )
+
+
+def create_chart_card(title: str, subtitle: str, figure) -> html.Div:
+    return html.Div(
+        children=[
+            html.Div(
+                children=[
+                    html.H3(title, style={"margin": "0", "fontSize": "20px", "fontWeight": "800", "color": COLORS["text"]}),
+                    html.P(subtitle, style={"margin": "6px 0 0 0", "fontSize": "14px", "color": COLORS["muted"], "lineHeight": "1.4"}),
+                ],
+                style={"marginBottom": "10px"},
+            ),
+            dcc.Graph(figure=figure, config={"displayModeBar": True}),
+        ],
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "20px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+        },
+    )
+
+
+def create_insight_card(title: str, text: str, variant: str = "default") -> html.Div:
+    background = COLORS["card"]
+    border = COLORS["border"]
+    marker = COLORS["blue"]
+
+    if variant == "warning":
+        background = COLORS["orange_light"]
+        border = COLORS["orange_border"]
+        marker = "#f97316"
+
+    return html.Div(
+        children=[
+            html.Div(
+                style={
+                    "height": "100%",
+                    "width": "5px",
+                    "borderRadius": "999px",
+                    "backgroundColor": marker,
+                    "marginRight": "16px",
+                }
+            ),
+            html.Div(
+                children=[
+                    html.H3(title, style={"margin": "0 0 8px 0", "fontSize": "19px", "fontWeight": "800"}),
+                    html.P(text, style={"margin": "0", "fontSize": "15px", "color": "#374151", "lineHeight": "1.6"}),
+                ]
+            ),
+        ],
+        style={
+            "display": "flex",
+            "backgroundColor": background,
+            "border": f"1px solid {border}",
+            "borderRadius": "18px",
+            "padding": "22px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.05)",
+            "marginTop": "22px",
+        },
+    )
+
+
+def create_tab_intro(title: str, text: str) -> html.Div:
+    return html.Div(
+        children=[
+            html.H2(
+                title,
+                style={
+                    "margin": "0 0 8px 0",
+                    "fontSize": "26px",
+                    "fontWeight": "900",
+                    "color": COLORS["text"],
+                },
+            ),
+            html.P(
+                text,
+                style={
+                    "margin": "0",
+                    "fontSize": "15px",
+                    "color": COLORS["muted"],
+                    "lineHeight": "1.55",
+                    "maxWidth": "980px",
+                },
+            ),
+        ],
+        style={
+            "backgroundColor": "#ffffff",
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "22px 24px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.05)",
+            "marginTop": "22px",
+            "marginBottom": "18px",
+        },
+    )
+
+
+def create_placeholder_card(title: str, text: str) -> html.Div:
+    return html.Div(
+        children=[
+            html.Div("Coming Next", style={"fontSize": "13px", "fontWeight": "800", "color": COLORS["blue"], "textTransform": "uppercase", "letterSpacing": "1px"}),
+            html.H3(title, style={"fontSize": "28px", "margin": "10px 0 8px 0"}),
+            html.P(text, style={"fontSize": "16px", "color": COLORS["muted"], "maxWidth": "720px", "lineHeight": "1.6"}),
+        ],
+        style={
+            "minHeight": "320px",
+            "backgroundColor": COLORS["card"],
+            "border": f"1px dashed #bfdbfe",
+            "borderRadius": "20px",
+            "padding": "40px",
+            "display": "flex",
+            "flexDirection": "column",
+            "alignItems": "center",
+            "justifyContent": "center",
+            "textAlign": "center",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.04)",
+        },
+    )
+
+
+def create_table(rows) -> html.Table:
+    return html.Table(
+        rows,
+        style={
+            "width": "100%",
+            "borderCollapse": "collapse",
+            "fontSize": "14px",
+        },
+    )
+
+
+customer_features, segment_summary, portfolio_kpis = load_data()
+kpis = portfolio_kpis.iloc[0]
+
+decision_counts = customer_features["decision_status"].value_counts().reset_index()
+decision_counts.columns = ["decision_status", "customer_count"]
+
+decision_fig = px.pie(
+    decision_counts,
+    names="decision_status",
+    values="customer_count",
+    hole=0.45,
+    title="Decision Status Share",
+    color="decision_status",
+    color_discrete_map=DECISION_COLOR_MAP,
+)
+decision_fig.update_layout(
+    paper_bgcolor="white",
+    plot_bgcolor="white",
+    margin=dict(l=20, r=20, t=55, b=20),
+    font=dict(family="Arial", size=13, color="#1f2937"),
+    legend_title_text="Decision",
+)
+
+decision_bar_fig = px.bar(
+    decision_counts,
+    x="decision_status",
+    y="customer_count",
+    text="customer_count",
+    title="Decision Status Count",
+    color="decision_status",
+    color_discrete_map=DECISION_COLOR_MAP,
+)
+decision_bar_fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+decision_bar_fig.update_layout(
+    xaxis_title="Decision Status",
+    yaxis_title="Customer Count",
+    showlegend=False,
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    margin=dict(l=40, r=30, t=55, b=40),
+    font=dict(family="Arial", size=13, color="#1f2937"),
+)
+
+segment_count_fig = px.bar(
+    segment_summary.sort_values("customer_count", ascending=True),
+    x="customer_count",
+    y="customer_segment",
+    orientation="h",
+    text="customer_count",
+    title="Customer Count by Segment",
+)
+segment_count_fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#2563eb")
+segment_count_fig.update_layout(
+    xaxis_title="Customer Count",
+    yaxis_title="Customer Segment",
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    margin=dict(l=40, r=30, t=55, b=40),
+    font=dict(family="Arial", size=13, color="#1f2937"),
+)
+
+eligible_fig = px.bar(
+    segment_summary.sort_values("campaign_eligible_rate", ascending=True),
+    x="campaign_eligible_rate",
+    y="customer_segment",
+    orientation="h",
+    text="campaign_eligible_rate",
+    title="Campaign Eligible Rate by Segment",
+)
+eligible_fig.update_traces(texttemplate="%{text:.1%}", textposition="outside", marker_color="#0ea5e9")
+eligible_fig.update_layout(
+    xaxis_title="Eligible Rate",
+    yaxis_title="Customer Segment",
+    xaxis_tickformat=".0%",
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    margin=dict(l=40, r=30, t=55, b=40),
+    font=dict(family="Arial", size=13, color="#1f2937"),
+)
+
+segment_decision_mix = (
+    customer_features.groupby(["customer_segment", "decision_status"], as_index=False)
+    .agg(customer_count=("customer_id", "count"))
+)
+
+segment_stack_fig = px.bar(
+    segment_decision_mix,
+    x="customer_segment",
+    y="customer_count",
+    color="decision_status",
+    title="Decision Mix by Segment",
+    color_discrete_map=DECISION_COLOR_MAP,
+)
+segment_stack_fig.update_layout(
+    xaxis_title="Customer Segment",
+    yaxis_title="Customer Count",
+    xaxis_tickangle=-25,
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    margin=dict(l=40, r=30, t=55, b=110),
+    font=dict(family="Arial", size=13, color="#1f2937"),
+    legend_title_text="Decision",
+)
+
+action_counts = customer_features["recommended_action"].value_counts().reset_index()
+action_counts.columns = ["recommended_action", "customer_count"]
+
+action_fig = px.pie(
+    action_counts,
+    names="recommended_action",
+    values="customer_count",
+    hole=0.42,
+    title="Recommended Action Mix",
+)
+action_fig.update_layout(
+    paper_bgcolor="white",
+    plot_bgcolor="white",
+    margin=dict(l=20, r=20, t=55, b=20),
+    font=dict(family="Arial", size=13, color="#1f2937"),
+    legend_title_text="Action",
+)
+
+offer_counts = customer_features["offer_type"].value_counts().reset_index()
+offer_counts.columns = ["offer_type", "customer_count"]
+
+offer_fig = px.bar(
+    offer_counts.sort_values("customer_count", ascending=True),
+    x="customer_count",
+    y="offer_type",
+    orientation="h",
+    text="customer_count",
+    title="Offer Type Distribution",
+)
+offer_fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#7c3aed")
+offer_fig.update_layout(
+    xaxis_title="Customer Count",
+    yaxis_title="Offer Type",
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    margin=dict(l=40, r=30, t=55, b=40),
+    font=dict(family="Arial", size=13, color="#1f2937"),
+)
+
+risk_counts = customer_features["risk_band"].value_counts().reset_index()
+risk_counts.columns = ["risk_band", "customer_count"]
+
+risk_fig = px.pie(
+    risk_counts,
+    names="risk_band",
+    values="customer_count",
+    hole=0.45,
+    title="Risk Band Distribution",
+    color="risk_band",
+    color_discrete_map=RISK_COLOR_MAP,
+)
+risk_fig.update_layout(
+    paper_bgcolor="white",
+    plot_bgcolor="white",
+    margin=dict(l=20, r=20, t=55, b=20),
+    font=dict(family="Arial", size=13, color="#1f2937"),
+    legend_title_text="Risk Band",
+)
+
+high_utilization_mix = (
+    customer_features[customer_features["customer_segment"] == "High-Utilization Revolver"]
+    ["decision_status"]
+    .value_counts()
+    .reset_index()
+)
+high_utilization_mix.columns = ["decision_status", "customer_count"]
+
+high_utilization_fig = px.bar(
+    high_utilization_mix,
+    x="decision_status",
+    y="customer_count",
+    text="customer_count",
+    title="High-Utilization Revolver Decision Mix",
+    color="decision_status",
+    color_discrete_map=DECISION_COLOR_MAP,
+)
+high_utilization_fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+high_utilization_fig.update_layout(
+    xaxis_title="Decision Status",
+    yaxis_title="Customer Count",
+    showlegend=False,
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    margin=dict(l=40, r=30, t=55, b=40),
+    font=dict(family="Arial", size=13, color="#1f2937"),
+)
+
+block_by_segment = (
+    customer_features[customer_features["decision_status"] == "Block"]
+    .groupby("customer_segment", as_index=False)
+    .agg(blocked_customers=("customer_id", "count"))
+    .sort_values("blocked_customers", ascending=True)
+)
+
+block_segment_fig = px.bar(
+    block_by_segment,
+    x="blocked_customers",
+    y="customer_segment",
+    orientation="h",
+    text="blocked_customers",
+    title="Blocked Customers by Segment",
+)
+block_segment_fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#dc2626")
+block_segment_fig.update_layout(
+    xaxis_title="Blocked Customers",
+    yaxis_title="Customer Segment",
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    margin=dict(l=40, r=30, t=55, b=40),
+    font=dict(family="Arial", size=13, color="#1f2937"),
+)
+
+risk_watch_count = len(customer_features[customer_features["customer_segment"] == "Risk Watch"])
+risk_watch_blocked = len(
+    customer_features[
+        (customer_features["customer_segment"] == "Risk Watch")
+        & (customer_features["decision_status"] == "Block")
+    ]
+)
+high_utilization_scaled = len(
+    customer_features[
+        (customer_features["customer_segment"] == "High-Utilization Revolver")
+        & (customer_features["decision_status"] == "Scale")
+    ]
+)
+total_blocked = len(customer_features[customer_features["decision_status"] == "Block"])
+
+priority_table = segment_summary[
+    [
+        "customer_segment",
+        "customer_count",
+        "avg_risk_adjusted_profit",
+        "avg_expected_roi",
+        "scale_count",
+        "test_count",
+        "campaign_eligible_rate",
+    ]
+].sort_values("customer_count", ascending=False)
+
+priority_table_display = priority_table.copy()
+priority_table_display["avg_risk_adjusted_profit"] = priority_table_display["avg_risk_adjusted_profit"].map(lambda x: f"${x:,.0f}")
+priority_table_display["avg_expected_roi"] = priority_table_display["avg_expected_roi"].map(lambda x: f"{x:.1f}")
+priority_table_display["campaign_eligible_rate"] = priority_table_display["campaign_eligible_rate"].map(lambda x: f"{x * 100:.1f}%")
+
+header_style = {
+    "textAlign": "left",
+    "backgroundColor": "#f3f4f6",
+    "padding": "12px",
+    "borderBottom": "1px solid #e5e7eb",
+    "fontWeight": "800",
+    "color": "#374151",
+}
+
+cell_style = {
+    "padding": "12px",
+    "borderBottom": "1px solid #f1f5f9",
+    "color": "#111827",
+}
+
+priority_rows = [
+    html.Tr([html.Th(col.replace("_", " ").title(), style=header_style) for col in priority_table_display.columns])
+]
+for _, row in priority_table_display.iterrows():
+    priority_rows.append(html.Tr([html.Td(row[col], style=cell_style) for col in priority_table_display.columns]))
+
+
+
+def create_small_metric_card(title: str, value: str, note: str, accent: str = "#2563eb") -> html.Div:
+    return html.Div(
+        children=[
+            html.Div(title, style={"fontSize": "13px", "fontWeight": "800", "color": COLORS["muted"]}),
+            html.Div(value, style={"fontSize": "26px", "fontWeight": "900", "marginTop": "8px", "color": COLORS["text"]}),
+            html.Div(note, style={"fontSize": "13px", "color": COLORS["muted"], "marginTop": "6px", "lineHeight": "1.35"}),
+        ],
+        style={
+            "backgroundColor": "#ffffff",
+            "borderTop": f"4px solid {accent}",
+            "borderLeft": f"1px solid {COLORS['border']}",
+            "borderRight": f"1px solid {COLORS['border']}",
+            "borderBottom": f"1px solid {COLORS['border']}",
+            "borderRadius": "16px",
+            "padding": "18px",
+            "boxShadow": "0 6px 18px rgba(15, 23, 42, 0.05)",
+        },
+    )
+
+
+def build_scenario_simulator_layout() -> html.Div:
+    segment_options = [{"label": "All Segments", "value": "All Segments"}] + [
+        {"label": segment, "value": segment}
+        for segment in sorted(customer_features["customer_segment"].unique())
+    ]
+
+    return html.Div(
+        children=[
+            create_tab_intro(
+                "Scenario Simulator",
+                "Use this section to test how campaign economics change when marketing cost, expected spend lift, and risk tolerance change. This helps decision-makers compare aggressive versus conservative rollout assumptions before launching a campaign.",
+            ),
+
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.H3("Scenario Inputs", style={"marginTop": "0"}),
+                            html.Label("Customer Segment", style={"fontWeight": "800"}),
+                            dcc.Dropdown(
+                                id="scenario-segment",
+                                options=segment_options,
+                                value="All Segments",
+                                clearable=False,
+                                style={"marginBottom": "18px"},
+                            ),
+
+                            html.Label("Marketing Cost per Customer", style={"fontWeight": "800"}),
+                            dcc.Slider(
+                                id="scenario-marketing-cost",
+                                min=1,
+                                max=25,
+                                step=1,
+                                value=5,
+                                marks={1: "$1", 5: "$5", 10: "$10", 15: "$15", 20: "$20", 25: "$25"},
+                                tooltip={"placement": "bottom", "always_visible": False},
+                            ),
+
+                            html.Div(style={"height": "22px"}),
+
+                            html.Label("Expected Spend Lift", style={"fontWeight": "800"}),
+                            dcc.Slider(
+                                id="scenario-spend-lift",
+                                min=-2,
+                                max=20,
+                                step=1,
+                                value=8,
+                                marks={-2: "-2%", 0: "0%", 5: "5%", 10: "10%", 15: "15%", 20: "20%"},
+                                tooltip={"placement": "bottom", "always_visible": False},
+                            ),
+
+                            html.Div(style={"height": "22px"}),
+
+                            html.Label("Max Default Probability Allowed", style={"fontWeight": "800"}),
+                            dcc.Slider(
+                                id="scenario-risk-threshold",
+                                min=2,
+                                max=20,
+                                step=1,
+                                value=8,
+                                marks={2: "2%", 5: "5%", 8: "8%", 12: "12%", 16: "16%", 20: "20%"},
+                                tooltip={"placement": "bottom", "always_visible": False},
+                            ),
+                        ],
+                        style={
+                            "backgroundColor": COLORS["card"],
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderRadius": "18px",
+                            "padding": "22px",
+                            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                        },
+                    ),
+
+                    html.Div(
+                        children=[
+                            html.H3("Scenario Output", style={"marginTop": "0"}),
+                            html.Div(id="scenario-output"),
+                        ],
+                        style={
+                            "backgroundColor": COLORS["card"],
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderRadius": "18px",
+                            "padding": "22px",
+                            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                        },
+                    ),
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "0.9fr 1.1fr",
+                    "gap": "18px",
+                },
+            ),
+        ]
+    )
+
+
+def build_ab_test_planner_layout() -> html.Div:
+    segment_options = [
+        {"label": segment, "value": segment}
+        for segment in sorted(customer_features["customer_segment"].unique())
+        if segment != "Risk Watch"
+    ]
+
+    return html.Div(
+        children=[
+            create_tab_intro(
+                "A/B Test Planner",
+                "Use this section to plan a controlled experiment before scaling a campaign. It helps estimate control/treatment group sizes, expected incremental responders, and whether the test is large enough to make a confident decision.",
+            ),
+
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.H3("Test Inputs", style={"marginTop": "0"}),
+
+                            html.Label("Target Segment", style={"fontWeight": "800"}),
+                            dcc.Dropdown(
+                                id="ab-segment",
+                                options=segment_options,
+                                value="High-Utilization Revolver",
+                                clearable=False,
+                                style={"marginBottom": "18px"},
+                            ),
+
+                            html.Label("Baseline Response Rate", style={"fontWeight": "800"}),
+                            dcc.Slider(
+                                id="ab-baseline-rate",
+                                min=1,
+                                max=20,
+                                step=1,
+                                value=6,
+                                marks={1: "1%", 5: "5%", 10: "10%", 15: "15%", 20: "20%"},
+                                tooltip={"placement": "bottom", "always_visible": False},
+                            ),
+
+                            html.Div(style={"height": "22px"}),
+
+                            html.Label("Expected Lift from Treatment", style={"fontWeight": "800"}),
+                            dcc.Slider(
+                                id="ab-lift",
+                                min=1,
+                                max=15,
+                                step=1,
+                                value=4,
+                                marks={1: "+1pp", 3: "+3pp", 5: "+5pp", 10: "+10pp", 15: "+15pp"},
+                                tooltip={"placement": "bottom", "always_visible": False},
+                            ),
+
+                            html.Div(style={"height": "22px"}),
+
+                            html.Label("Test Population Available", style={"fontWeight": "800"}),
+                            dcc.Slider(
+                                id="ab-test-population",
+                                min=100,
+                                max=3000,
+                                step=100,
+                                value=1000,
+                                marks={100: "100", 500: "500", 1000: "1k", 2000: "2k", 3000: "3k"},
+                                tooltip={"placement": "bottom", "always_visible": False},
+                            ),
+                        ],
+                        style={
+                            "backgroundColor": COLORS["card"],
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderRadius": "18px",
+                            "padding": "22px",
+                            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                        },
+                    ),
+
+                    html.Div(
+                        children=[
+                            html.H3("Test Recommendation", style={"marginTop": "0"}),
+                            html.Div(id="ab-output"),
+                        ],
+                        style={
+                            "backgroundColor": COLORS["card"],
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderRadius": "18px",
+                            "padding": "22px",
+                            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                        },
+                    ),
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "0.9fr 1.1fr",
+                    "gap": "18px",
+                },
+            ),
+        ]
+    )
+
+
+
+app = Dash(__name__)
+app.title = "Risk-Aware Credit Card Growth Decision Engine"
+
+tab_style = {
+    "padding": "14px 18px",
+    "fontWeight": "700",
+    "fontSize": "14px",
+    "border": "none",
+    "backgroundColor": "#eef2ff",
+    "color": "#374151",
+}
+
+selected_tab_style = {
+    "padding": "14px 18px",
+    "fontWeight": "800",
+    "fontSize": "14px",
+    "border": "none",
+    "backgroundColor": "#2563eb",
+    "color": "white",
+    "borderRadius": "12px",
+}
+
+app.layout = html.Div(
+    children=[
+        html.Div(
+            children=[
+                html.Div(
+                    children=[
+                        html.Div(
+                            "Credit Card Portfolio Analytics",
+                            style={
+                                "textTransform": "uppercase",
+                                "letterSpacing": "1.5px",
+                                "fontSize": "12px",
+                                "fontWeight": "800",
+                                "color": "#bfdbfe",
+                                "marginBottom": "10px",
+                            },
+                        ),
+                        html.H1(
+                            "Risk-Aware Credit Card Growth Decision Engine",
+                            style={
+                                "fontSize": "42px",
+                                "lineHeight": "1.1",
+                                "margin": "0",
+                                "fontWeight": "900",
+                            },
+                        ),
+                        html.P(
+                            "Identify which existing credit card customers to scale, test, protect, or block using segmentation, profitability, risk, and responsible-lending guardrails.",
+                            style={
+                                "fontSize": "17px",
+                                "lineHeight": "1.55",
+                                "color": "#e5e7eb",
+                                "maxWidth": "980px",
+                                "marginTop": "14px",
+                            },
+                        ),
+                    ],
+                    style={"flex": "1"},
+                ),
+                html.Div(
+                    children=[
+                        html.Div("Decision Framework", style={"fontSize": "13px", "fontWeight": "800", "color": "#dbeafe", "marginBottom": "12px"}),
+                        html.Div("Scale", style={"padding": "10px 14px", "backgroundColor": "rgba(22,163,74,0.25)", "borderRadius": "999px", "marginBottom": "10px", "fontWeight": "800"}),
+                        html.Div("Test", style={"padding": "10px 14px", "backgroundColor": "rgba(37,99,235,0.25)", "borderRadius": "999px", "marginBottom": "10px", "fontWeight": "800"}),
+                        html.Div("Do Not Launch", style={"padding": "10px 14px", "backgroundColor": "rgba(156,163,175,0.25)", "borderRadius": "999px", "marginBottom": "10px", "fontWeight": "800"}),
+                        html.Div("Block", style={"padding": "10px 14px", "backgroundColor": "rgba(220,38,38,0.28)", "borderRadius": "999px", "fontWeight": "800"}),
+                    ],
+                    style={
+                        "width": "260px",
+                        "backgroundColor": "rgba(255,255,255,0.12)",
+                        "border": "1px solid rgba(255,255,255,0.18)",
+                        "borderRadius": "18px",
+                        "padding": "20px",
+                    },
+                ),
+            ],
+            style={
+                "display": "flex",
+                "gap": "24px",
+                "background": "linear-gradient(135deg, #111827, #243b6b)",
+                "color": "white",
+                "borderRadius": "24px",
+                "padding": "34px",
+                "boxShadow": "0 16px 36px rgba(15,23,42,0.18)",
+                "marginBottom": "24px",
+            },
+        ),
+
+        html.Div(
+            children=[
+                create_kpi_card("Total Customers", f"{int(kpis['total_customers']):,}", "Existing customers analyzed", "#2563eb"),
+                create_kpi_card("Monthly Spend", format_currency(kpis["total_monthly_spend"]), "Total card portfolio spend", "#0ea5e9"),
+                create_kpi_card("Risk-Adjusted Profit", format_currency(kpis["total_monthly_risk_adjusted_profit"]), "Monthly profit after risk cost", "#16a34a"),
+                create_kpi_card("Campaign Eligible", format_percent(kpis["campaign_eligible_rate"]), "Scale or Test customers", "#7c3aed"),
+                create_kpi_card("Blocked by Guardrails", format_percent(kpis["block_rate"]), "Protected from growth offers", "#dc2626"),
+            ],
+            style={
+                "display": "grid",
+                "gridTemplateColumns": "repeat(5, 1fr)",
+                "gap": "16px",
+                "marginBottom": "24px",
+            },
+        ),
+
+        dcc.Tabs(
+            children=[
+                dcc.Tab(
+                    label="Overview",
+                    style=tab_style,
+                    selected_style=selected_tab_style,
+                    children=[
+                        create_tab_intro(
+                            "Portfolio Overview",
+                            "Start here for the executive view of the portfolio. This page shows how many customers are ready to scale, how many should be tested, and how many should be held back or blocked before any campaign rollout.",
+                        ),
+                        html.Div(
+                            children=[
+                                create_chart_card("Decision Mix", "Share of customers assigned to Scale, Test, Do Not Launch, or Block.", decision_fig),
+                                create_chart_card("Decision Counts", "Volume behind each portfolio decision.", decision_bar_fig),
+                            ],
+                            style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "18px", "marginTop": "22px"},
+                        ),
+                        create_insight_card(
+                            "Executive Takeaway",
+                            "The engine avoids a simple campaign-blast approach. It separates customers into launch-ready, test-worthy, not-ready, and blocked groups so growth decisions are tied to risk-adjusted economics.",
+                        ),
+                    ],
+                ),
+                dcc.Tab(
+                    label="Segment Strategy",
+                    style=tab_style,
+                    selected_style=selected_tab_style,
+                    children=[
+                        create_tab_intro(
+                            "Segment Strategy",
+                            "Use this tab to understand which customer groups drive the largest opportunity. It compares segment size, campaign eligibility, and decision mix so business teams can prioritize where to scale, test, or apply guardrails.",
+                        ),
+                        html.Div(
+                            children=[
+                                create_chart_card("Segment Size", "Customer concentration across the portfolio.", segment_count_fig),
+                                create_chart_card("Eligibility Rate", "Which segments have the highest share of Scale/Test decisions.", eligible_fig),
+                            ],
+                            style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "18px", "marginTop": "22px"},
+                        ),
+                        html.Div(style={"height": "18px"}),
+                        create_chart_card("Segment Decision Mix", "How Scale, Test, Do Not Launch, and Block decisions differ across customer segments.", segment_stack_fig),
+                        html.Div(
+                            children=[
+                                html.H3("Priority Segment Table", style={"margin": "0 0 14px 0", "fontSize": "20px", "fontWeight": "800"}),
+                                create_table(priority_rows),
+                            ],
+                            style={
+                                "backgroundColor": COLORS["card"],
+                                "border": f"1px solid {COLORS['border']}",
+                                "borderRadius": "18px",
+                                "padding": "20px",
+                                "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                                "marginTop": "18px",
+                                "overflowX": "auto",
+                            },
+                        ),
+                        create_insight_card(
+                            "Segment-Level Takeaway",
+                            "Core Customer and Loyal High-Value Customer are the strongest broad-scale opportunities. High-Utilization Revolvers may show financial value, but should remain a controlled test and guardrail segment.",
+                        ),
+                    ],
+                ),
+                dcc.Tab(
+                    label="Offer Engine",
+                    style=tab_style,
+                    selected_style=selected_tab_style,
+                    children=[
+                        create_tab_intro(
+                            "Offer Decision Engine",
+                            "This tab explains the next-best-action logic. Instead of giving every customer the same campaign, the engine assigns different offers or treatments based on segment, risk, profitability, and expected ROI.",
+                        ),
+                        html.Div(
+                            children=[
+                                create_chart_card("Recommended Action Mix", "How the engine assigns next-best-actions across the portfolio.", action_fig),
+                                create_chart_card("Offer Type Distribution", "The actual offer or treatment associated with each recommendation.", offer_fig),
+                            ],
+                            style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "18px", "marginTop": "22px"},
+                        ),
+                        create_insight_card(
+                            "Next-Best-Action Logic",
+                            "The engine does not recommend one generic offer to every customer. It assigns different treatments for growth, retention, reactivation, payment health, and risk protection.",
+                        ),
+                    ],
+                ),
+                dcc.Tab(
+                    label="Guardrails",
+                    style=tab_style,
+                    selected_style=selected_tab_style,
+                    children=[
+                        create_tab_intro(
+                            "Responsible Lending Guardrails",
+                            "This tab checks whether the engine is protecting customers who may carry higher credit risk. The goal is to separate profitable growth from risky growth and prevent aggressive offers from going to the wrong groups.",
+                        ),
+                        html.Div(
+                            children=[
+                                create_kpi_card("Total Blocked Customers", f"{total_blocked:,}", "Blocked from growth campaigns", "#dc2626"),
+                                create_kpi_card("Risk Watch Block Check", f"{risk_watch_blocked:,} / {risk_watch_count:,}", "Risk Watch customers blocked", "#f97316"),
+                                create_kpi_card("High-Utilization Scaled", f"{high_utilization_scaled:,}", "Should remain zero", "#16a34a"),
+                            ],
+                            style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "16px", "marginTop": "22px", "marginBottom": "18px"},
+                        ),
+                        html.Div(
+                            children=[
+                                create_chart_card("Risk Band Distribution", "Portfolio split by estimated risk band.", risk_fig),
+                                create_chart_card("High-Utilization Revolver Mix", "Decision mix for customers who may need extra guardrails.", high_utilization_fig),
+                            ],
+                            style={"display": "grid", "gridTemplateColumns": "0.95fr 1.05fr", "gap": "18px"},
+                        ),
+                        html.Div(style={"height": "18px"}),
+                        create_chart_card("Blocked Customers by Segment", "Where risk guardrails are triggered.", block_segment_fig),
+                        create_insight_card(
+                            "Guardrail Interpretation",
+                            "This section separates revenue potential from responsible growth. Some customers may generate interest income, but that does not mean they should receive aggressive spend or upgrade offers.",
+                            variant="warning",
+                        ),
+                    ],
+                ),
+                dcc.Tab(
+                    label="Scenario Simulator",
+                    style=tab_style,
+                    selected_style=selected_tab_style,
+                    children=[
+                        build_scenario_simulator_layout()
+                    ],
+                ),
+                dcc.Tab(
+                    label="A/B Test Planner",
+                    style=tab_style,
+                    selected_style=selected_tab_style,
+                    children=[
+                        build_ab_test_planner_layout()
+                    ],
+                ),
+            ],
+            style={
+                "backgroundColor": "#eef2ff",
+                "borderRadius": "16px",
+                "padding": "8px",
+                "border": "1px solid #dbeafe",
+                "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.04)",
+            },
+            colors={
+                "border": "transparent",
+                "primary": "#2563eb",
+                "background": "#eef2ff",
+            },
+        ),
+    ],
+    style={
+        "fontFamily": "Arial, sans-serif",
+        "backgroundColor": COLORS["background"],
+        "minHeight": "100vh",
+        "padding": "28px 36px",
+        "width": "100%",
+        "maxWidth": "none",
+        "boxSizing": "border-box",
+        "margin": "0",
+        "color": COLORS["text"],
+    },
+)
+
+
+
+@app.callback(
+    Output("scenario-output", "children"),
+    Input("scenario-segment", "value"),
+    Input("scenario-marketing-cost", "value"),
+    Input("scenario-spend-lift", "value"),
+    Input("scenario-risk-threshold", "value"),
+)
+def update_scenario_simulator(segment: str, marketing_cost: float, spend_lift_percent: float, risk_threshold_percent: float):
+    scenario_df = customer_features.copy()
+
+    if segment != "All Segments":
+        scenario_df = scenario_df[scenario_df["customer_segment"] == segment].copy()
+
+    spend_lift = spend_lift_percent / 100
+    risk_threshold = risk_threshold_percent / 100
+
+    interchange_rate = 0.018
+    monthly_interest_rate = 0.245 / 12
+    rewards_rate = 0.015
+    loss_given_default = 0.72
+    campaign_horizon_months = 12
+
+    incremental_revenue = scenario_df["monthly_spend"] * spend_lift * interchange_rate
+    incremental_interest = scenario_df["revolving_balance"] * spend_lift * monthly_interest_rate
+    incremental_rewards_cost = scenario_df["monthly_spend"] * spend_lift * rewards_rate
+    incremental_expected_loss = (
+        scenario_df["default_probability"]
+        * scenario_df["monthly_spend"]
+        * spend_lift
+        * loss_given_default
+    )
+
+    scenario_df["scenario_incremental_profit"] = (
+        campaign_horizon_months
+        * (
+            incremental_revenue
+            + incremental_interest
+            - incremental_rewards_cost
+            - incremental_expected_loss
+        )
+        - marketing_cost
+    )
+
+    scenario_df["scenario_roi"] = scenario_df["scenario_incremental_profit"] / marketing_cost
+
+    scenario_df["scenario_decision"] = "Do Not Launch"
+
+    block_mask = (
+        (scenario_df["customer_segment"] == "Risk Watch")
+        | (scenario_df["risk_band"] == "Very High Risk")
+        | (scenario_df["default_probability"] > risk_threshold)
+    )
+
+    scale_mask = (
+        (scenario_df["scenario_roi"] >= 5)
+        & (~block_mask)
+        & (scenario_df["customer_segment"] != "High-Utilization Revolver")
+    )
+
+    test_mask = (
+        (scenario_df["scenario_roi"] >= 0)
+        & (~block_mask)
+        & (~scale_mask)
+    )
+
+    scenario_df.loc[block_mask, "scenario_decision"] = "Block"
+    scenario_df.loc[test_mask, "scenario_decision"] = "Test"
+    scenario_df.loc[scale_mask, "scenario_decision"] = "Scale"
+
+    total_customers = len(scenario_df)
+    scale_count = int((scenario_df["scenario_decision"] == "Scale").sum())
+    test_count = int((scenario_df["scenario_decision"] == "Test").sum())
+    block_count = int((scenario_df["scenario_decision"] == "Block").sum())
+    eligible_count = scale_count + test_count
+    total_profit = scenario_df["scenario_incremental_profit"].sum()
+    avg_roi = scenario_df["scenario_roi"].mean()
+
+    if total_customers == 0:
+        return html.Div("No customers found for this scenario.")
+
+    if block_count / total_customers > 0.25:
+        recommendation = "Conservative scenario. A large share of customers would be blocked, so this setup is better for risk protection than growth."
+        rec_color = "#dc2626"
+    elif scale_count / total_customers > 0.35 and total_profit > 0:
+        recommendation = "Strong growth scenario. The assumptions create a meaningful scale pool while keeping guardrails active."
+        rec_color = "#16a34a"
+    elif eligible_count / total_customers > 0.35:
+        recommendation = "Test-first scenario. There is opportunity, but enough uncertainty remains that controlled testing is better than broad rollout."
+        rec_color = "#2563eb"
+    else:
+        recommendation = "Limited launch scenario. Expected lift or economics may be too weak, so the business should revisit offer design before launch."
+        rec_color = "#f97316"
+
+    decision_mix = scenario_df["scenario_decision"].value_counts().reset_index()
+    decision_mix.columns = ["scenario_decision", "customer_count"]
+
+    scenario_fig = px.bar(
+        decision_mix,
+        x="scenario_decision",
+        y="customer_count",
+        text="customer_count",
+        color="scenario_decision",
+        color_discrete_map=DECISION_COLOR_MAP,
+        title="Scenario Decision Mix",
+    )
+    scenario_fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+    scenario_fig.update_layout(
+        showlegend=False,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=40, r=30, t=55, b=40),
+        font=dict(family="Arial", size=13, color="#1f2937"),
+        xaxis_title="Scenario Decision",
+        yaxis_title="Customer Count",
+    )
+
+    return html.Div(
+        children=[
+            html.Div(
+                children=[
+                    create_small_metric_card("Customers in Scenario", f"{total_customers:,}", "Filtered portfolio size", "#2563eb"),
+                    create_small_metric_card("Scale Customers", f"{scale_count:,}", "Customers eligible for broad rollout", "#16a34a"),
+                    create_small_metric_card("Test Customers", f"{test_count:,}", "Customers recommended for controlled testing", "#2563eb"),
+                    create_small_metric_card("Blocked Customers", f"{block_count:,}", "Customers blocked by risk guardrails", "#dc2626"),
+                ],
+                style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px", "marginBottom": "18px"},
+            ),
+            html.Div(
+                children=[
+                    create_small_metric_card("Estimated Incremental Profit", f"${total_profit:,.0f}", "Scenario-level campaign profit", "#7c3aed"),
+                    create_small_metric_card("Average Scenario ROI", f"{avg_roi:.1f}x", "Average return per marketing dollar", "#0ea5e9"),
+                ],
+                style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "12px", "marginBottom": "18px"},
+            ),
+            dcc.Graph(figure=scenario_fig),
+            html.Div(
+                children=[
+                    html.H4("Recommendation", style={"margin": "0 0 8px 0"}),
+                    html.P(recommendation, style={"margin": "0", "lineHeight": "1.55"}),
+                ],
+                style={
+                    "backgroundColor": "#ffffff",
+                    "borderLeft": f"5px solid {rec_color}",
+                    "borderRadius": "14px",
+                    "padding": "18px",
+                    "boxShadow": "0 6px 18px rgba(15, 23, 42, 0.05)",
+                },
+            ),
+        ]
+    )
+
+
+@app.callback(
+    Output("ab-output", "children"),
+    Input("ab-segment", "value"),
+    Input("ab-baseline-rate", "value"),
+    Input("ab-lift", "value"),
+    Input("ab-test-population", "value"),
+)
+def update_ab_test_planner(segment: str, baseline_rate_percent: float, lift_pp: float, test_population: int):
+    segment_df = customer_features[customer_features["customer_segment"] == segment].copy()
+    segment_size = len(segment_df)
+
+    available_population = min(segment_size, test_population)
+    control_size = available_population // 2
+    treatment_size = available_population - control_size
+
+    baseline_rate = baseline_rate_percent / 100
+    treatment_rate = baseline_rate + (lift_pp / 100)
+
+    expected_control_responders = control_size * baseline_rate
+    expected_treatment_responders = treatment_size * treatment_rate
+    incremental_responders = expected_treatment_responders - (treatment_size * baseline_rate)
+
+    # Approximate sample size per group for detecting difference in two proportions
+    z_alpha = 1.96
+    z_beta = 0.84
+    p1 = baseline_rate
+    p2 = treatment_rate
+    effect = max(abs(p2 - p1), 0.001)
+    pooled_p = (p1 + p2) / 2
+    required_per_group = int(
+        ((z_alpha + z_beta) ** 2)
+        * (pooled_p * (1 - pooled_p) * 2)
+        / (effect ** 2)
+    )
+
+    total_required = required_per_group * 2
+
+    if available_population >= total_required:
+        readiness = "Ready to test"
+        rec_color = "#16a34a"
+        recommendation = "The available population is large enough for this test assumption. Proceed with a controlled A/B test before scaling."
+    elif available_population >= total_required * 0.6:
+        readiness = "Directional test"
+        rec_color = "#f97316"
+        recommendation = "The test may provide directional learning, but it may not be strong enough for a high-confidence decision. Consider extending the test window or combining similar segments."
+    else:
+        readiness = "Underpowered"
+        rec_color = "#dc2626"
+        recommendation = "The available population is likely too small for this expected lift. Increase the test population, target a larger segment, or test a stronger offer."
+
+    ab_mix_df = pd.DataFrame(
+        {
+            "Group": ["Control", "Treatment"],
+            "Customers": [control_size, treatment_size],
+            "Expected Responders": [expected_control_responders, expected_treatment_responders],
+        }
+    )
+
+    ab_fig = px.bar(
+        ab_mix_df,
+        x="Group",
+        y="Expected Responders",
+        text="Expected Responders",
+        title="Expected Responders by Test Group",
+    )
+    ab_fig.update_traces(texttemplate="%{text:.0f}", textposition="outside", marker_color=["#9ca3af", "#2563eb"])
+    ab_fig.update_layout(
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=40, r=30, t=55, b=40),
+        font=dict(family="Arial", size=13, color="#1f2937"),
+        xaxis_title="Test Group",
+        yaxis_title="Expected Responders",
+    )
+
+    return html.Div(
+        children=[
+            html.Div(
+                children=[
+                    create_small_metric_card("Segment Size", f"{segment_size:,}", "Customers in selected segment", "#2563eb"),
+                    create_small_metric_card("Test Population Used", f"{available_population:,}", "Customers assigned to test", "#0ea5e9"),
+                    create_small_metric_card("Required Sample", f"{total_required:,}", "Approximate total sample needed", "#7c3aed"),
+                    create_small_metric_card("Readiness", readiness, "Power check result", rec_color),
+                ],
+                style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px", "marginBottom": "18px"},
+            ),
+            html.Div(
+                children=[
+                    create_small_metric_card("Control Group", f"{control_size:,}", f"Expected responders: {expected_control_responders:.0f}", "#9ca3af"),
+                    create_small_metric_card("Treatment Group", f"{treatment_size:,}", f"Expected responders: {expected_treatment_responders:.0f}", "#2563eb"),
+                    create_small_metric_card("Incremental Responders", f"{incremental_responders:.0f}", "Additional responders from treatment", "#16a34a"),
+                ],
+                style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "12px", "marginBottom": "18px"},
+            ),
+            dcc.Graph(figure=ab_fig),
+            html.Div(
+                children=[
+                    html.H4("Test Recommendation", style={"margin": "0 0 8px 0"}),
+                    html.P(recommendation, style={"margin": "0", "lineHeight": "1.55"}),
+                ],
+                style={
+                    "backgroundColor": "#ffffff",
+                    "borderLeft": f"5px solid {rec_color}",
+                    "borderRadius": "14px",
+                    "padding": "18px",
+                    "boxShadow": "0 6px 18px rgba(15, 23, 42, 0.05)",
+                },
+            ),
+        ]
+    )
+
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
