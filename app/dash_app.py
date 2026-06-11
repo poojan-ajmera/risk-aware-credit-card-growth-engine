@@ -678,12 +678,12 @@ offer_fig = px.bar(
     y="offer_type",
     orientation="h",
     text="customer_count",
-    title="Offer Type Distribution",
+    title="Treatment Type Distribution",
 )
 offer_fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#7c3aed")
 offer_fig.update_layout(
     xaxis_title="Customer Count",
-    yaxis_title="Offer Type",
+    yaxis_title="Treatment Type",
     plot_bgcolor="white",
     paper_bgcolor="white",
     margin=dict(l=40, r=30, t=55, b=40),
@@ -1344,6 +1344,265 @@ def create_action_prompt_panel() -> html.Details:
             "boxShadow": "0 6px 16px rgba(15, 23, 42, 0.04)",
         },
     )
+
+
+
+def create_strategy_playbook_table() -> html.Div:
+    rows = [
+        {
+            "priority": "1",
+            "segment": "Core Customer",
+            "campaign": "Everyday spend, merchant offers, servicing enrollment",
+            "decision": "Scale",
+            "action": "Launch broad campaigns with standard guardrails.",
+            "risk": "Low-to-moderate risk; monitor response and profitability.",
+            "owner": "Growth / Portfolio Marketing",
+            "next_step": "Send to Scenario Simulator or export Scale audience.",
+        },
+        {
+            "priority": "2",
+            "segment": "Loyal High-Value Customer",
+            "campaign": "Retention, premium, travel, loyalty campaigns",
+            "decision": "Scale",
+            "action": "Prioritize upgrade, retention, and value-deepening offers.",
+            "risk": "Strong value segment; avoid over-incentivizing customers who would spend anyway.",
+            "owner": "Lifecycle / Loyalty",
+            "next_step": "Compare campaign ROI and test offer variants.",
+        },
+        {
+            "priority": "3",
+            "segment": "High-Utilization Revolver",
+            "campaign": "Balance health, payment reminders, utilization nudges",
+            "decision": "Test / Constrain",
+            "action": "Use controlled testing and protective engagement, not aggressive spend growth.",
+            "risk": "High utilization can create revenue but also credit stress.",
+            "owner": "Risk + Customer Management",
+            "next_step": "Use A/B Planner and guardrail review before rollout.",
+        },
+        {
+            "priority": "4",
+            "segment": "Underused Low-Risk Customer",
+            "campaign": "Everyday spend, merchant offers, digital activation",
+            "decision": "Test",
+            "action": "Test activation campaigns to increase usage without raising risk.",
+            "risk": "Low risk, but upside may be uncertain if engagement is weak.",
+            "owner": "Engagement / Digital",
+            "next_step": "Run low-cost A/B tests and export Test audience.",
+        },
+        {
+            "priority": "5",
+            "segment": "Dormant but Recoverable",
+            "campaign": "Reactivation, digital engagement, servicing nudges",
+            "decision": "Test",
+            "action": "Run small reactivation campaigns with clear success metrics.",
+            "risk": "Dormancy means response may be low; avoid large spend before proof.",
+            "owner": "Lifecycle Reactivation",
+            "next_step": "Test messaging and channel preference.",
+        },
+        {
+            "priority": "6",
+            "segment": "Premium Growth Candidate",
+            "campaign": "Premium, travel, merchant partnerships",
+            "decision": "Scale / Test",
+            "action": "Use higher-value offers only when risk-adjusted profit supports it.",
+            "risk": "Rewards cost can reduce profit if offer is too rich.",
+            "owner": "Premium Product / Partnerships",
+            "next_step": "Compare expected ROI and campaign cost.",
+        },
+        {
+            "priority": "7",
+            "segment": "Risk Watch",
+            "campaign": "Protective servicing only",
+            "decision": "Block",
+            "action": "Do not send growth offers. Use monitoring or servicing support only.",
+            "risk": "Guardrail segment; avoid risky or aggressive growth treatment.",
+            "owner": "Credit Risk / Compliance",
+            "next_step": "Review Guardrails, not campaign rollout.",
+        },
+    ]
+
+    header_style = {
+        "padding": "12px",
+        "fontSize": "12px",
+        "fontWeight": "900",
+        "color": COLORS["muted"],
+        "textTransform": "uppercase",
+        "borderBottom": f"1px solid {COLORS['border']}",
+        "backgroundColor": "#f8fafc",
+        "textAlign": "left",
+    }
+
+    cell_style = {
+        "padding": "12px",
+        "fontSize": "13px",
+        "lineHeight": "1.4",
+        "borderBottom": f"1px solid {COLORS['border']}",
+        "verticalAlign": "top",
+    }
+
+    decision_colors = {
+        "Scale": "#16a34a",
+        "Scale / Test": "#16a34a",
+        "Test": "#2563eb",
+        "Test / Constrain": "#f97316",
+        "Block": "#dc2626",
+    }
+
+    return html.Div(
+        children=[
+            html.H3(
+                "Segment Strategy Playbook",
+                style={"fontSize": "22px", "fontWeight": "900", "margin": "0 0 8px 0"},
+            ),
+            html.P(
+                "This table turns portfolio analysis into business actions. It explains what each segment should receive, how to treat it, who should own it, and what the next step should be.",
+                style={"color": COLORS["muted"], "lineHeight": "1.5", "margin": "0 0 16px 0"},
+            ),
+            html.Table(
+                children=[
+                    html.Thead(
+                        html.Tr(
+                            [
+                                html.Th("Priority", style=header_style),
+                                html.Th("Segment", style=header_style),
+                                html.Th("Campaign Fit", style=header_style),
+                                html.Th("Decision", style=header_style),
+                                html.Th("Recommended Action", style=header_style),
+                                html.Th("Risk Note", style=header_style),
+                                html.Th("Owner", style=header_style),
+                                html.Th("Next Step", style=header_style),
+                            ]
+                        )
+                    ),
+                    html.Tbody(
+                        [
+                            html.Tr(
+                                children=[
+                                    html.Td(row["priority"], style={**cell_style, "fontWeight": "900"}),
+                                    html.Td(row["segment"], style={**cell_style, "fontWeight": "900"}),
+                                    html.Td(row["campaign"], style=cell_style),
+                                    html.Td(
+                                        html.Span(
+                                            row["decision"],
+                                            title=f"Recommended rollout posture: {row['decision']}",
+                                            style={
+                                                "backgroundColor": decision_colors.get(row["decision"], "#9ca3af"),
+                                                "color": "white",
+                                                "borderRadius": "999px",
+                                                "padding": "6px 10px",
+                                                "fontSize": "12px",
+                                                "fontWeight": "900",
+                                                "display": "inline-block",
+                                            },
+                                        ),
+                                        style=cell_style,
+                                    ),
+                                    html.Td(row["action"], style=cell_style),
+                                    html.Td(row["risk"], style=cell_style),
+                                    html.Td(row["owner"], style=cell_style),
+                                    html.Td(row["next_step"], style=cell_style),
+                                ],
+                                title=f"{row['segment']}: {row['action']}",
+                            )
+                            for row in rows
+                        ]
+                    ),
+                ],
+                style={
+                    "width": "100%",
+                    "borderCollapse": "collapse",
+                    "backgroundColor": "#ffffff",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "14px",
+                    "overflow": "hidden",
+                },
+            ),
+        ],
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "22px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+            "marginTop": "18px",
+            "overflowX": "auto",
+        },
+    )
+
+
+def create_strategy_cta_panel() -> html.Div:
+    ctas = [
+        {
+            "title": "Pick a campaign",
+            "body": "Go to Campaigns & Offers to select a recommended campaign from the scored library.",
+            "accent": "#2563eb",
+        },
+        {
+            "title": "Test the campaign",
+            "body": "Use Decision Workbench to simulate profit impact and design an A/B test.",
+            "accent": "#7c3aed",
+        },
+        {
+            "title": "Export the audience",
+            "body": "Download eligible, test, scale, or blocked customers from the Export Center.",
+            "accent": "#16a34a",
+        },
+        {
+            "title": "Review guardrails",
+            "body": "Use Guardrails as the final review before campaign launch.",
+            "accent": "#dc2626",
+        },
+    ]
+
+    return html.Div(
+        children=[
+            html.H3(
+                "How this playbook connects the dashboard",
+                style={"fontSize": "22px", "fontWeight": "900", "margin": "0 0 8px 0"},
+            ),
+            html.P(
+                "The playbook is the bridge between analytics and action. It tells a business user what to do next after reading the charts.",
+                style={"color": COLORS["muted"], "lineHeight": "1.5", "margin": "0 0 16px 0"},
+            ),
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div(
+                                style={
+                                    "height": "5px",
+                                    "width": "44px",
+                                    "backgroundColor": cta["accent"],
+                                    "borderRadius": "999px",
+                                    "marginBottom": "12px",
+                                },
+                            ),
+                            html.Div(cta["title"], style={"fontWeight": "900", "fontSize": "15px", "marginBottom": "6px"}),
+                            html.Div(cta["body"], style={"fontSize": "13px", "lineHeight": "1.45", "color": COLORS["muted"]}),
+                        ],
+                        title=cta["body"],
+                        style={
+                            "backgroundColor": "#ffffff",
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderRadius": "14px",
+                            "padding": "14px",
+                        },
+                    )
+                    for cta in ctas
+                ],
+                style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px"},
+            ),
+        ],
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "22px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+            "marginTop": "18px",
+        },
+    )
+
 
 
 def create_filter_panel() -> html.Div:
@@ -2920,25 +3179,27 @@ app.layout = html.Div(
                     ],
                 ),
                 dcc.Tab(
-                    label="Offer Engine",
-                    value="offer-engine",
+                    label="Strategy Playbook",
+                    value="strategy-playbook",
                     style=tab_style,
                     selected_style=selected_tab_style,
                     children=[
                         create_tab_intro(
-                            "Offer Decision Engine",
-                            "This tab explains the next-best-action logic. Instead of giving every customer the same campaign, the engine assigns different offers or treatments based on segment, risk, profitability, and expected ROI.",
+                            "Strategy Playbook",
+                            "This page translates the analytics into a practical operating playbook. It shows what each customer segment should receive, which campaigns fit, where to scale, where to test, where to constrain, and where guardrails should stop launch.",
                         ),
+                        create_strategy_cta_panel(),
+                        create_strategy_playbook_table(),
                         html.Div(
                             children=[
-                                create_chart_card("Recommended Action Mix", "How the engine assigns next-best-actions across the portfolio.", action_fig, "offer-action-mix-chart"),
-                                create_chart_card("Offer Type Distribution", "The actual offer or treatment associated with each recommendation.", offer_fig, "offer-type-chart"),
+                                create_chart_card("Recommended Action Mix", "Portfolio-level action mix behind the playbook.", action_fig, "offer-action-mix-chart"),
+                                create_chart_card("Treatment Type Distribution", "Offer or treatment categories assigned by the decision engine.", offer_fig, "offer-type-chart"),
                             ],
-                            style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "18px", "marginTop": "22px"},
+                            style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "18px", "marginTop": "18px"},
                         ),
                         create_insight_card(
-                            "Next-Best-Action Logic",
-                            "The engine does not recommend one generic offer to every customer. It assigns different treatments for growth, retention, reactivation, payment health, and risk protection.",
+                            "How to read this playbook",
+                            "The playbook does not replace campaign testing. It organizes the decision path: pick the campaign, simulate impact, design the test, export the customer list, and review guardrails before launch.",
                         ),
                     ],
                 ),
@@ -4499,7 +4760,7 @@ def build_action_mix_fig(df: pd.DataFrame):
 
 def build_offer_type_fig(df: pd.DataFrame):
     if df.empty:
-        return empty_figure("Offer Type Distribution")
+        return empty_figure("Treatment Type Distribution")
 
     counts = df["offer_type"].value_counts().reset_index()
     counts.columns = ["offer_type", "customer_count"]
@@ -4510,12 +4771,12 @@ def build_offer_type_fig(df: pd.DataFrame):
         y="offer_type",
         orientation="h",
         text="customer_count",
-        title="Offer Type Distribution",
+        title="Treatment Type Distribution",
     )
     fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#7c3aed")
     fig.update_layout(
         xaxis_title="Customer Count",
-        yaxis_title="Offer Type",
+        yaxis_title="Treatment Type",
         plot_bgcolor="white",
         paper_bgcolor="white",
         margin=dict(l=40, r=30, t=55, b=40),
