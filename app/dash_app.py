@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, dcc, html, dash_table
+from dash.exceptions import PreventUpdate
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -2003,24 +2004,57 @@ def build_scenario_simulator_layout() -> html.Div:
 
 
 def build_ab_test_planner_layout() -> html.Div:
-    segment_options = [
+    segment_options = [{"label": "All Segments", "value": "All Segments"}] + [
         {"label": segment, "value": segment}
         for segment in sorted(customer_features["customer_segment"].unique())
         if segment != "Risk Watch"
     ]
 
+    if campaign_recommendations.empty:
+        campaign_options = [{"label": "No campaign recommendations available", "value": "None"}]
+        default_campaign_id = "None"
+    else:
+        ab_campaigns = campaign_recommendations.head(10).copy()
+        campaign_options = [
+            {
+                "label": f"{row['dashboard_recommendation_rank']}. {row['campaign_name']} ({row['recommended_rollout_decision']})",
+                "value": row["campaign_id"],
+            }
+            for _, row in ab_campaigns.iterrows()
+        ]
+        default_campaign_id = ab_campaigns.iloc[0]["campaign_id"]
+
     return html.Div(
         children=[
             create_tab_intro(
                 "A/B Test Planner",
-                "Use this section to plan a controlled experiment before scaling a campaign. It helps estimate control/treatment group sizes, expected incremental responders, and whether the test is large enough to make a confident decision.",
+                "Use this section to design a controlled experiment before scaling a campaign. It focuses on test population, control/treatment split, test duration, expected responders, and whether the test is powered enough to support a rollout decision.",
             ),
 
             html.Div(
                 children=[
                     html.Div(
                         children=[
-                            html.H3("Test Inputs", style={"marginTop": "0"}),
+                            html.H3("Experiment Setup", style={"marginTop": "0"}),
+
+                            html.Label("Campaign", style={"fontWeight": "800"}),
+                            dcc.Dropdown(
+                                id="ab-campaign",
+                                options=campaign_options,
+                                value=default_campaign_id,
+                                clearable=False,
+                                style={"marginBottom": "18px"},
+                            ),
+
+                            html.Div(
+                                "Campaign assumptions auto-fill response rate, lift, and test population. You can still override them manually.",
+                                style={
+                                    "fontSize": "13px",
+                                    "color": COLORS["muted"],
+                                    "lineHeight": "1.45",
+                                    "marginBottom": "18px",
+                                },
+                            ),
 
                             html.Label("Target Segment", style={"fontWeight": "800"}),
                             dcc.Dropdown(
@@ -2067,6 +2101,32 @@ def build_ab_test_planner_layout() -> html.Div:
                                 marks={100: "100", 500: "500", 1000: "1k", 2000: "2k", 3000: "3k"},
                                 tooltip={"placement": "bottom", "always_visible": False},
                             ),
+
+                            html.Div(style={"height": "22px"}),
+
+                            html.Label("Control / Treatment Split", style={"fontWeight": "800"}),
+                            dcc.Dropdown(
+                                id="ab-test-split",
+                                options=[
+                                    {"label": "50 / 50 balanced test", "value": "50/50"},
+                                    {"label": "70 / 30 conservative rollout", "value": "70/30"},
+                                    {"label": "80 / 20 small treatment pilot", "value": "80/20"},
+                                ],
+                                value="50/50",
+                                clearable=False,
+                                style={"marginBottom": "18px"},
+                            ),
+
+                            html.Label("Test Duration", style={"fontWeight": "800"}),
+                            dcc.Slider(
+                                id="ab-test-duration",
+                                min=2,
+                                max=12,
+                                step=1,
+                                value=6,
+                                marks={2: "2w", 4: "4w", 6: "6w", 8: "8w", 12: "12w"},
+                                tooltip={"placement": "bottom", "always_visible": False},
+                            ),
                         ],
                         style={
                             "backgroundColor": COLORS["card"],
@@ -2079,7 +2139,7 @@ def build_ab_test_planner_layout() -> html.Div:
 
                     html.Div(
                         children=[
-                            html.H3("Test Recommendation", style={"marginTop": "0"}),
+                            html.H3("Experiment Design Output", style={"marginTop": "0"}),
                             html.Div(id="ab-output"),
                         ],
                         style={
@@ -2093,7 +2153,7 @@ def build_ab_test_planner_layout() -> html.Div:
                 ],
                 style={
                     "display": "grid",
-                    "gridTemplateColumns": "0.9fr 1.1fr",
+                    "gridTemplateColumns": "1fr",
                     "gap": "18px",
                 },
             ),
@@ -2101,6 +2161,187 @@ def build_ab_test_planner_layout() -> html.Div:
     )
 
 
+
+
+def get_campaign_audience_df(campaign_id: str, segment: str, audience_type: str) -> pd.DataFrame:
+    """Return a campaign-level customer audience preview/export list.
+
+    This uses campaign target/exclusion segments and guardrails from the campaign
+    library. In production, this logic should run against a warehouse or scoring
+    table, not inside the browser.
+    """
+    audience_df = customer_features.copy()
+
+    selected_recommendation = pd.Series(dtype="object")
+    selected_library_row = pd.Series(dtype="object")
+
+    if not campaign_recommendations.empty and campaign_id not in [None, "None"]:
+        recommendation_match = campaign_recommendations[
+            campaign_recommendations["campaign_id"] == campaign_id
+        ]
+        if not recommendation_match.empty:
+            selected_recommendation = recommendation_match.iloc[0]
+
+    if not campaign_library.empty and campaign_id not in [None, "None"]:
+        library_match = campaign_library[campaign_library["campaign_id"] == campaign_id]
+        if not library_match.empty:
+            selected_library_row = library_match.iloc[0]
+
+    target_segments = split_semicolon_values(selected_recommendation.get("target_segments", ""))
+    excluded_segments = split_semicolon_values(selected_recommendation.get("excluded_segments", ""))
+
+    if target_segments:
+        audience_df = audience_df[audience_df["customer_segment"].isin(target_segments)].copy()
+
+    if excluded_segments:
+        audience_df = audience_df[~audience_df["customer_segment"].isin(excluded_segments)].copy()
+
+    if segment != "All Segments":
+        audience_df = audience_df[audience_df["customer_segment"] == segment].copy()
+
+    max_default_probability = float(selected_library_row.get("max_default_probability", 0.20))
+    max_utilization = float(selected_library_row.get("max_utilization", 1.00))
+    min_credit_score = int(selected_library_row.get("min_credit_score", 0))
+    risk_sensitivity = selected_library_row.get("risk_sensitivity", "Medium")
+
+    guardrail_pass = (
+        (audience_df["default_probability"] <= max_default_probability)
+        & (audience_df["utilization_rate"] <= max_utilization)
+        & (audience_df["credit_score"] >= min_credit_score)
+        & (audience_df["risk_band"] != "Very High Risk")
+    )
+
+    if risk_sensitivity in ["High", "Very High"]:
+        guardrail_pass = (
+            guardrail_pass
+            & (audience_df["late_payments_12m"] == 0)
+            & (audience_df["risk_adjusted_profit"] >= 0)
+        )
+
+    audience_df["campaign_audience_status"] = "Eligible"
+    audience_df.loc[~guardrail_pass, "campaign_audience_status"] = "Blocked"
+
+    audience_df["campaign_test_group"] = "Holdout"
+    eligible_index = audience_df[audience_df["campaign_audience_status"] == "Eligible"].index
+    half_point = len(eligible_index) // 2
+
+    audience_df.loc[eligible_index[:half_point], "campaign_test_group"] = "Control"
+    audience_df.loc[eligible_index[half_point:], "campaign_test_group"] = "Treatment"
+
+    audience_df["campaign_customer_action"] = "Test"
+    audience_df.loc[
+        (audience_df["campaign_audience_status"] == "Eligible")
+        & (audience_df["decision_status"] == "Scale"),
+        "campaign_customer_action",
+    ] = "Scale"
+
+    audience_df.loc[
+        audience_df["campaign_audience_status"] == "Blocked",
+        "campaign_customer_action",
+    ] = "Blocked"
+
+    if audience_type == "Scale":
+        audience_df = audience_df[audience_df["campaign_customer_action"] == "Scale"].copy()
+    elif audience_type == "Test":
+        audience_df = audience_df[audience_df["campaign_customer_action"] == "Test"].copy()
+    elif audience_type == "Blocked":
+        audience_df = audience_df[audience_df["campaign_customer_action"] == "Blocked"].copy()
+    else:
+        audience_df = audience_df[audience_df["campaign_audience_status"] == "Eligible"].copy()
+
+    selected_columns = [
+        "customer_id",
+        "customer_name",
+        "customer_email",
+        "city",
+        "state",
+        "customer_segment",
+        "risk_band",
+        "decision_status",
+        "campaign_customer_action",
+        "campaign_test_group",
+        "credit_score",
+        "utilization_rate",
+        "default_probability",
+        "monthly_spend",
+        "risk_adjusted_profit",
+        "expected_roi",
+        "preferred_channel",
+        "card_type",
+        "rewards_preference",
+    ]
+
+    existing_columns = [column for column in selected_columns if column in audience_df.columns]
+    audience_df = audience_df[existing_columns].copy()
+
+    audience_df = audience_df.sort_values(
+        ["campaign_customer_action", "risk_adjusted_profit", "expected_roi"],
+        ascending=[True, False, False],
+    )
+
+    return audience_df
+
+
+def build_customer_export_preview_rows(df: pd.DataFrame, limit: int = 25) -> list[dict]:
+    if df.empty:
+        return []
+
+    preview = df.head(limit).copy()
+
+    rename_map = {
+        "customer_id": "Customer ID",
+        "customer_name": "Name",
+        "customer_email": "Email",
+        "city": "City",
+        "state": "State",
+        "customer_segment": "Segment",
+        "risk_band": "Risk Band",
+        "decision_status": "Portfolio Decision",
+        "campaign_customer_action": "Campaign Action",
+        "campaign_test_group": "Test Group",
+        "credit_score": "Credit Score",
+        "utilization_rate": "Utilization",
+        "default_probability": "Default Probability",
+        "monthly_spend": "Monthly Spend",
+        "risk_adjusted_profit": "Risk-Adjusted Profit",
+        "expected_roi": "Expected ROI",
+        "preferred_channel": "Preferred Channel",
+        "card_type": "Card Type",
+        "rewards_preference": "Rewards Preference",
+    }
+
+    preview = preview.rename(columns=rename_map)
+
+    for column in ["Utilization", "Default Probability"]:
+        if column in preview.columns:
+            preview[column] = preview[column].apply(lambda value: f"{value * 100:.1f}%")
+
+    for column in ["Monthly Spend", "Risk-Adjusted Profit"]:
+        if column in preview.columns:
+            preview[column] = preview[column].apply(format_currency)
+
+    if "Expected ROI" in preview.columns:
+        preview["Expected ROI"] = preview["Expected ROI"].apply(lambda value: f"{value:.2f}x")
+
+    preview_columns = [
+        "Customer ID",
+        "Name",
+        "Segment",
+        "Risk Band",
+        "Portfolio Decision",
+        "Campaign Action",
+        "Test Group",
+        "Credit Score",
+        "Utilization",
+        "Default Probability",
+        "Monthly Spend",
+        "Risk-Adjusted Profit",
+        "Preferred Channel",
+    ]
+
+    preview_columns = [column for column in preview_columns if column in preview.columns]
+
+    return preview[preview_columns].to_dict("records")
 
 app = Dash(__name__, suppress_callback_exceptions=True)
 app.title = "Risk-Aware Credit Card Growth Decision Engine"
@@ -3224,18 +3465,73 @@ def update_scenario_simulator(campaign_id: str, segment: str, marketing_cost: fl
 
 
 @app.callback(
+    Output("ab-baseline-rate", "value"),
+    Output("ab-lift", "value"),
+    Output("ab-test-population", "value"),
+    Input("ab-campaign", "value"),
+)
+def sync_ab_inputs_with_campaign(campaign_id: str):
+    if campaign_recommendations.empty or campaign_id in [None, "None"]:
+        return 6, 4, 1000
+
+    selected = campaign_recommendations[
+        campaign_recommendations["campaign_id"] == campaign_id
+    ]
+
+    if selected.empty:
+        return 6, 4, 1000
+
+    campaign = selected.iloc[0]
+
+    baseline_rate = int(round(float(campaign.get("avg_predicted_response_rate", 0.06)) * 100))
+    expected_lift = int(round(float(campaign.get("expected_lift_pct", 0.04)) * 100))
+    test_population = int(min(3000, max(100, round(float(campaign.get("eligible_customers", 1000)) / 2, -2))))
+
+    baseline_rate = max(1, min(20, baseline_rate))
+    expected_lift = max(1, min(15, expected_lift))
+    test_population = max(100, min(3000, test_population))
+
+    return baseline_rate, expected_lift, test_population
+
+
+@app.callback(
     Output("ab-output", "children"),
+    Input("ab-campaign", "value"),
     Input("ab-segment", "value"),
     Input("ab-baseline-rate", "value"),
     Input("ab-lift", "value"),
     Input("ab-test-population", "value"),
+    Input("ab-test-split", "value"),
+    Input("ab-test-duration", "value"),
 )
-def update_ab_test_planner(segment: str, baseline_rate_percent: float, lift_pp: float, test_population: int):
-    segment_df = customer_features[customer_features["customer_segment"] == segment].copy()
+def update_ab_test_planner(campaign_id: str, segment: str, baseline_rate_percent: float, lift_pp: float, test_population: int, split_value: str, test_duration_weeks: int):
+    selected_campaign = None
+
+    if not campaign_recommendations.empty and campaign_id not in [None, "None"]:
+        campaign_match = campaign_recommendations[
+            campaign_recommendations["campaign_id"] == campaign_id
+        ]
+
+        if not campaign_match.empty:
+            selected_campaign = campaign_match.iloc[0]
+
+    # Use the same source of truth as the export center.
+    # This keeps the displayed audience, experiment sizing, table preview, and downloads aligned.
+    segment_df = get_campaign_audience_df(campaign_id, segment, "Eligible")
     segment_size = len(segment_df)
 
     available_population = min(segment_size, test_population)
-    control_size = available_population // 2
+
+    if not split_value or "/" not in split_value:
+        split_value = "50/50"
+
+    try:
+        control_share = int(split_value.split("/")[0]) / 100
+    except ValueError:
+        control_share = 0.50
+
+    control_share = max(0.20, min(0.90, control_share))
+    control_size = int(available_population * control_share)
     treatment_size = available_population - control_size
 
     baseline_rate = baseline_rate_percent / 100
@@ -3263,7 +3559,7 @@ def update_ab_test_planner(segment: str, baseline_rate_percent: float, lift_pp: 
     if available_population >= total_required:
         readiness = "Ready to test"
         rec_color = "#16a34a"
-        recommendation = "The available population is large enough for this test assumption. Proceed with a controlled A/B test before scaling."
+        recommendation = "The available population is large enough for this test assumption. Proceed with a controlled A/B test before scaling this campaign."
     elif available_population >= total_required * 0.6:
         readiness = "Directional test"
         rec_color = "#f97316"
@@ -3271,7 +3567,7 @@ def update_ab_test_planner(segment: str, baseline_rate_percent: float, lift_pp: 
     else:
         readiness = "Underpowered"
         rec_color = "#dc2626"
-        recommendation = "The available population is likely too small for this expected lift. Increase the test population, target a larger segment, or test a stronger offer."
+        recommendation = "The available population is likely too small for this expected lift. Increase the test population, target a larger campaign audience, extend test duration, or test a stronger offer."
 
     ab_mix_df = pd.DataFrame(
         {
@@ -3286,7 +3582,7 @@ def update_ab_test_planner(segment: str, baseline_rate_percent: float, lift_pp: 
         x="Group",
         y="Expected Responders",
         text="Expected Responders",
-        title="Expected Responders by Test Group",
+        title="Control vs Treatment Response Plan",
     )
     ab_fig.update_traces(texttemplate="%{text:.0f}", textposition="outside", marker_color=["#9ca3af", "#2563eb"])
     ab_fig.update_layout(
@@ -3294,18 +3590,131 @@ def update_ab_test_planner(segment: str, baseline_rate_percent: float, lift_pp: 
         paper_bgcolor="white",
         margin=dict(l=40, r=30, t=55, b=40),
         font=dict(family="Arial", size=13, color="#1f2937"),
-        xaxis_title="Test Group",
+        xaxis_title="Experiment Group",
         yaxis_title="Expected Responders",
     )
 
+    if segment_size == 0:
+        zero_audience_note = html.Div(
+            children=[
+                html.H4("No matching customers for this setup", style={"margin": "0 0 8px 0", "color": "#991b1b"}),
+                html.P(
+                    "This campaign and selected segment do not overlap after campaign targeting and guardrails. Choose All Segments, select one of the campaign target segments, or change the campaign to generate a testable audience.",
+                    style={"margin": "0", "lineHeight": "1.55", "color": "#7f1d1d"},
+                ),
+            ],
+            style={
+                "backgroundColor": "#fef2f2",
+                "border": "1px solid #fecaca",
+                "borderLeft": "5px solid #dc2626",
+                "borderRadius": "14px",
+                "padding": "14px",
+                "marginBottom": "16px",
+            },
+        )
+    else:
+        zero_audience_note = html.Div()
+
+    if selected_campaign is None:
+        campaign_context_card = html.Div(
+            "No campaign selected. Test plan uses manual assumptions.",
+            style={
+                "backgroundColor": "#f8fafc",
+                "border": f"1px solid {COLORS['border']}",
+                "borderRadius": "14px",
+                "padding": "14px",
+                "marginBottom": "16px",
+                "color": COLORS["muted"],
+                "fontWeight": "700",
+            },
+        )
+    else:
+        campaign_context_card = html.Div(
+            children=[
+                html.Div(
+                    "Selected Campaign",
+                    style={
+                        "fontSize": "12px",
+                        "fontWeight": "900",
+                        "textTransform": "uppercase",
+                        "color": COLORS["muted"],
+                        "marginBottom": "6px",
+                    },
+                ),
+                html.Div(
+                    selected_campaign["campaign_name"],
+                    style={
+                        "fontSize": "18px",
+                        "fontWeight": "900",
+                        "color": COLORS["text"],
+                        "marginBottom": "6px",
+                    },
+                ),
+                html.Div(
+                    f"{selected_campaign['campaign_family']} • {selected_campaign['recommended_rollout_decision']} • {split_value} split • {test_duration_weeks} week test • baseline {baseline_rate_percent:.0f}% • lift +{lift_pp:.0f}pp",
+                    style={
+                        "fontSize": "13px",
+                        "fontWeight": "700",
+                        "color": COLORS["muted"],
+                    },
+                ),
+            ],
+            style={
+                "backgroundColor": COLORS["light_blue"],
+                "border": f"1px solid {COLORS['border']}",
+                "borderRadius": "14px",
+                "padding": "14px",
+                "marginBottom": "16px",
+            },
+        )
+
     return html.Div(
         children=[
+            campaign_context_card,
+            zero_audience_note,
             html.Div(
                 children=[
-                    create_small_metric_card("Segment Size", f"{segment_size:,}", "Customers in selected segment", "#2563eb"),
-                    create_small_metric_card("Test Population Used", f"{available_population:,}", "Customers assigned to test", "#0ea5e9"),
-                    create_small_metric_card("Required Sample", f"{total_required:,}", "Approximate total sample needed", "#7c3aed"),
-                    create_small_metric_card("Readiness", readiness, "Power check result", rec_color),
+                    html.Div(
+                        children=[
+                            html.Div("1", style={"fontWeight": "900", "color": "#2563eb", "fontSize": "18px"}),
+                            html.H4("Control Group", style={"margin": "4px 0", "fontSize": "15px"}),
+                            html.P("Receives standard experience. Used to measure the natural baseline response.", style={"margin": "0", "fontSize": "13px", "color": COLORS["muted"], "lineHeight": "1.45"}),
+                        ],
+                        style={"backgroundColor": "#f8fafc", "border": f"1px solid {COLORS['border']}", "borderRadius": "14px", "padding": "14px"},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div("2", style={"fontWeight": "900", "color": "#2563eb", "fontSize": "18px"}),
+                            html.H4("Treatment Group", style={"margin": "4px 0", "fontSize": "15px"}),
+                            html.P("Receives the selected campaign. Lift is measured against the control group.", style={"margin": "0", "fontSize": "13px", "color": COLORS["muted"], "lineHeight": "1.45"}),
+                        ],
+                        style={"backgroundColor": "#eff6ff", "border": "1px solid #bfdbfe", "borderRadius": "14px", "padding": "14px"},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div("3", style={"fontWeight": "900", "color": "#16a34a", "fontSize": "18px"}),
+                            html.H4("Success Metric", style={"margin": "4px 0", "fontSize": "15px"}),
+                            html.P(selected_campaign["primary_success_metric"] if selected_campaign is not None else "Incremental response and campaign lift", style={"margin": "0", "fontSize": "13px", "color": COLORS["muted"], "lineHeight": "1.45"}),
+                        ],
+                        style={"backgroundColor": "#f0fdf4", "border": "1px solid #bbf7d0", "borderRadius": "14px", "padding": "14px"},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div("4", style={"fontWeight": "900", "color": "#f97316", "fontSize": "18px"}),
+                            html.H4("Decision Gate", style={"margin": "4px 0", "fontSize": "15px"}),
+                            html.P("Scale only if lift is positive, sample is powered, and risk guardrails stay within limits.", style={"margin": "0", "fontSize": "13px", "color": COLORS["muted"], "lineHeight": "1.45"}),
+                        ],
+                        style={"backgroundColor": "#fff7ed", "border": "1px solid #fed7aa", "borderRadius": "14px", "padding": "14px"},
+                    ),
+                ],
+                style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px", "marginBottom": "18px"},
+            ),
+            html.Div(
+                children=[
+                    create_small_metric_card("Eligible Test Audience", f"{segment_size:,}", "Customers matching campaign and segment filters", "#2563eb"),
+                    create_small_metric_card("Assigned Sample", f"{available_population:,}", "Customers included in experiment", "#0ea5e9"),
+                    create_small_metric_card("Required Sample Size", f"{total_required:,}", "Approximate sample needed for confidence", "#7c3aed"),
+                    create_small_metric_card("Power Readiness", readiness, "Experiment confidence check", rec_color),
                 ],
                 style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px", "marginBottom": "18px"},
             ),
@@ -3314,13 +3723,146 @@ def update_ab_test_planner(segment: str, baseline_rate_percent: float, lift_pp: 
                     create_small_metric_card("Control Group", f"{control_size:,}", f"Expected responders: {expected_control_responders:.0f}", "#9ca3af"),
                     create_small_metric_card("Treatment Group", f"{treatment_size:,}", f"Expected responders: {expected_treatment_responders:.0f}", "#2563eb"),
                     create_small_metric_card("Incremental Responders", f"{incremental_responders:.0f}", "Additional responders from treatment", "#16a34a"),
+                    create_small_metric_card("Test Design", split_value, f"{test_duration_weeks} week experiment", "#7c3aed"),
                 ],
-                style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "12px", "marginBottom": "18px"},
+                style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px", "marginBottom": "18px"},
+            ),
+            html.Div(
+                children=[
+                    html.H3(
+                        "Customer List & Export Center",
+                        style={"margin": "0 0 8px 0", "fontSize": "20px", "fontWeight": "900"},
+                    ),
+                    html.P(
+                        "Inspect the exact customers behind this campaign audience. The table shows a clean preview, while the download buttons export the fuller customer list for campaign operations or A/B test setup.",
+                        style={"margin": "0 0 16px 0", "color": COLORS["muted"], "lineHeight": "1.5"},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div(
+                                children=[
+                                    html.Label("Audience Type", style={"fontWeight": "800"}),
+                                    dcc.Dropdown(
+                                        id="ab-audience-type",
+                                        options=[
+                                            {"label": "Eligible customers", "value": "Eligible"},
+                                            {"label": "Scale customers", "value": "Scale"},
+                                            {"label": "Test customers", "value": "Test"},
+                                            {"label": "Blocked customers", "value": "Blocked"},
+                                        ],
+                                        value="Eligible",
+                                        clearable=False,
+                                    ),
+                                ],
+                            ),
+                            html.Div(
+                                children=[
+                                    html.Label("Action", style={"fontWeight": "800"}),
+                                    html.Div(
+                                        children=[
+                                            html.Button(
+                                                "Download CSV",
+                                                id="download-ab-customer-list-button",
+                                                n_clicks=0,
+                                                style={
+                                                    "backgroundColor": COLORS["blue"],
+                                                    "color": "white",
+                                                    "border": "none",
+                                                    "borderRadius": "10px",
+                                                    "padding": "10px 14px",
+                                                    "fontWeight": "900",
+                                                    "cursor": "pointer",
+                                                    "width": "150px",
+                                                },
+                                            ),
+                                            html.Button(
+                                                "Download Excel",
+                                                id="download-ab-customer-list-excel-button",
+                                                n_clicks=0,
+                                                style={
+                                                    "backgroundColor": "#16a34a",
+                                                    "color": "white",
+                                                    "border": "none",
+                                                    "borderRadius": "10px",
+                                                    "padding": "10px 14px",
+                                                    "fontWeight": "900",
+                                                    "cursor": "pointer",
+                                                    "width": "160px",
+                                                },
+                                            ),
+                                        ],
+                                        style={
+                                            "display": "flex",
+                                            "gap": "10px",
+                                            "alignItems": "center",
+                                            "marginTop": "6px",
+                                            "flexWrap": "wrap",
+                                        },
+                                    ),
+                                    dcc.Download(id="download-ab-customer-list"),
+                                    dcc.Download(id="download-ab-customer-list-excel"),
+                                ],
+                            ),
+                        ],
+                        style={
+                            "display": "grid",
+                            "gridTemplateColumns": "1fr",
+                            "gap": "14px",
+                            "marginBottom": "16px",
+                        },
+                    ),
+                    html.Div(id="ab-customer-export-summary"),
+                    dash_table.DataTable(
+                        id="ab-customer-list-table",
+                        columns=[],
+                        data=[],
+                        page_size=8,
+                        sort_action="native",
+                        style_table={"overflowX": "auto"},
+                        style_header={
+                            "backgroundColor": "#f8fafc",
+                            "fontWeight": "900",
+                            "color": COLORS["muted"],
+                            "border": f"1px solid {COLORS['border']}",
+                        },
+                        style_cell={
+                            "padding": "10px",
+                            "fontSize": "13px",
+                            "fontFamily": "Arial",
+                            "border": f"1px solid {COLORS['border']}",
+                            "whiteSpace": "normal",
+                            "height": "auto",
+                            "textAlign": "left",
+                        },
+                        style_data_conditional=[
+                            {
+                                "if": {"filter_query": "{Campaign Action} = Scale"},
+                                "backgroundColor": "#f0fdf4",
+                            },
+                            {
+                                "if": {"filter_query": "{Campaign Action} = Test"},
+                                "backgroundColor": "#eff6ff",
+                            },
+                            {
+                                "if": {"filter_query": "{Campaign Action} = Blocked"},
+                                "backgroundColor": "#fef2f2",
+                            },
+                        ],
+                    ),
+                ],
+                style={
+                    "backgroundColor": "#ffffff",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "18px",
+                    "padding": "18px",
+                    "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.05)",
+                    "marginBottom": "18px",
+                },
             ),
             dcc.Graph(figure=ab_fig),
             html.Div(
                 children=[
-                    html.H4("Test Recommendation", style={"margin": "0 0 8px 0"}),
+                    html.H4("Experiment Decision", style={"margin": "0 0 8px 0"}),
                     html.P(recommendation, style={"margin": "0", "lineHeight": "1.55"}),
                 ],
                 style={
@@ -3335,6 +3877,90 @@ def update_ab_test_planner(segment: str, baseline_rate_percent: float, lift_pp: 
     )
 
 
+
+
+
+
+@app.callback(
+    Output("ab-customer-list-table", "data"),
+    Output("ab-customer-list-table", "columns"),
+    Output("ab-customer-export-summary", "children"),
+    Input("ab-campaign", "value"),
+    Input("ab-segment", "value"),
+    Input("ab-audience-type", "value"),
+)
+def update_ab_customer_export_preview(campaign_id: str, segment: str, audience_type: str):
+    audience_df = get_campaign_audience_df(campaign_id, segment, audience_type)
+
+    preview_rows = build_customer_export_preview_rows(audience_df, limit=25)
+    columns = [{"name": column, "id": column} for column in preview_rows[0].keys()] if preview_rows else []
+
+    scale_count = int((audience_df.get("campaign_customer_action", pd.Series(dtype=str)) == "Scale").sum()) if not audience_df.empty else 0
+    test_count = int((audience_df.get("campaign_customer_action", pd.Series(dtype=str)) == "Test").sum()) if not audience_df.empty else 0
+    blocked_count = int((audience_df.get("campaign_customer_action", pd.Series(dtype=str)) == "Blocked").sum()) if not audience_df.empty else 0
+
+    summary = html.Div(
+        children=[
+            create_small_metric_card("Preview Rows", f"{min(len(audience_df), 25):,}", "Displayed in table", "#2563eb"),
+            create_small_metric_card("Export Customers", f"{len(audience_df):,}", "Rows included in downloads", "#16a34a"),
+            create_small_metric_card("Scale / Test / Blocked", f"{scale_count:,} / {test_count:,} / {blocked_count:,}", "Campaign action split", "#7c3aed"),
+        ],
+        style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "12px", "marginBottom": "16px"},
+    )
+
+    return preview_rows, columns, summary
+
+
+@app.callback(
+    Output("download-ab-customer-list", "data"),
+    Input("download-ab-customer-list-button", "n_clicks"),
+    State("ab-campaign", "value"),
+    State("ab-segment", "value"),
+    State("ab-audience-type", "value"),
+    prevent_initial_call=True,
+)
+def download_ab_customer_list(n_clicks: int, campaign_id: str, segment: str, audience_type: str):
+    if not n_clicks:
+        raise PreventUpdate
+
+    audience_df = get_campaign_audience_df(campaign_id, segment, audience_type)
+
+    if audience_df.empty:
+        raise PreventUpdate
+
+    safe_campaign_id = campaign_id if campaign_id not in [None, "None"] else "campaign"
+    safe_segment = str(segment).lower().replace(" ", "_").replace("/", "_")
+    safe_audience = str(audience_type).lower().replace(" ", "_").replace("/", "_")
+
+    filename = f"{safe_campaign_id}_{safe_segment}_{safe_audience}_customer_list.csv"
+
+    return dcc.send_data_frame(audience_df.to_csv, filename, index=False)
+
+
+@app.callback(
+    Output("download-ab-customer-list-excel", "data"),
+    Input("download-ab-customer-list-excel-button", "n_clicks"),
+    State("ab-campaign", "value"),
+    State("ab-segment", "value"),
+    State("ab-audience-type", "value"),
+    prevent_initial_call=True,
+)
+def download_ab_customer_list_excel(n_clicks: int, campaign_id: str, segment: str, audience_type: str):
+    if not n_clicks:
+        raise PreventUpdate
+
+    audience_df = get_campaign_audience_df(campaign_id, segment, audience_type)
+
+    if audience_df.empty:
+        raise PreventUpdate
+
+    safe_campaign_id = campaign_id if campaign_id not in [None, "None"] else "campaign"
+    safe_segment = str(segment).lower().replace(" ", "_").replace("/", "_")
+    safe_audience = str(audience_type).lower().replace(" ", "_").replace("/", "_")
+
+    filename = f"{safe_campaign_id}_{safe_segment}_{safe_audience}_customer_list.xlsx"
+
+    return dcc.send_data_frame(audience_df.to_excel, filename, index=False)
 
 
 
