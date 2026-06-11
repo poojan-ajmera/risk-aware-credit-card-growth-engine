@@ -1347,6 +1347,220 @@ def create_action_prompt_panel() -> html.Details:
 
 
 
+
+def create_strategy_flow_diagram() -> html.Div:
+    steps = [
+        {
+            "title": "Customer Portfolio",
+            "body": "Existing cardholders with spend, balance, credit, risk, and engagement signals.",
+            "accent": "#2563eb",
+        },
+        {
+            "title": "Segment Strategy",
+            "body": "Group customers into Core, Loyal, High-Utilization, Dormant, Premium, and Risk Watch.",
+            "accent": "#0ea5e9",
+        },
+        {
+            "title": "Campaign Library",
+            "body": "Match segments to growth, servicing, retention, merchant, or protective campaigns.",
+            "accent": "#7c3aed",
+        },
+        {
+            "title": "Scenario Simulation",
+            "body": "Test cost, lift, risk tolerance, ROI, profit, and campaign economics.",
+            "accent": "#f97316",
+        },
+        {
+            "title": "A/B Test Design",
+            "body": "Split control/treatment groups and check whether the experiment is powered.",
+            "accent": "#16a34a",
+        },
+        {
+            "title": "Customer Export",
+            "body": "Download eligible, test, scale, or blocked customer lists for action.",
+            "accent": "#059669",
+        },
+        {
+            "title": "Guardrail Review",
+            "body": "Final check before launch to avoid risky growth and protect customers.",
+            "accent": "#dc2626",
+        },
+    ]
+
+    diagram_items = []
+
+    for idx, step in enumerate(steps):
+        diagram_items.append(
+            html.Div(
+                children=[
+                    html.Div(
+                        step["title"],
+                        style={
+                            "fontSize": "14px",
+                            "fontWeight": "900",
+                            "color": COLORS["text"],
+                            "marginBottom": "6px",
+                        },
+                    ),
+                    html.Div(
+                        step["body"],
+                        style={
+                            "fontSize": "12px",
+                            "lineHeight": "1.35",
+                            "color": COLORS["muted"],
+                        },
+                    ),
+                ],
+                title=step["body"],
+                style={
+                    "backgroundColor": "#ffffff",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderTop": f"5px solid {step['accent']}",
+                    "borderRadius": "14px",
+                    "padding": "12px",
+                    "minHeight": "118px",
+                },
+            )
+        )
+
+        if idx < len(steps) - 1:
+            diagram_items.append(
+                html.Div(
+                    "→",
+                    style={
+                        "fontSize": "26px",
+                        "fontWeight": "900",
+                        "color": COLORS["muted"],
+                        "display": "flex",
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                    },
+                )
+            )
+
+    return html.Div(
+        children=[
+            html.H3(
+                "Decision Flow Sketch",
+                style={"fontSize": "22px", "fontWeight": "900", "margin": "0 0 8px 0"},
+            ),
+            html.P(
+                "This sketch shows how the dashboard moves from raw portfolio insight to campaign execution and final risk review.",
+                style={"color": COLORS["muted"], "lineHeight": "1.5", "margin": "0 0 16px 0"},
+            ),
+            html.Div(
+                children=diagram_items,
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "1.2fr 32px 1.2fr 32px 1.2fr 32px 1.2fr 32px 1.2fr 32px 1.2fr 32px 1.2fr",
+                    "gap": "8px",
+                    "alignItems": "stretch",
+                },
+            ),
+        ],
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "22px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+            "marginTop": "18px",
+            "overflowX": "auto",
+        },
+    )
+
+
+def build_strategy_risk_return_figure():
+    plot_df = segment_summary.copy()
+
+    decision_map = {
+        "Core Customer": "Scale",
+        "Loyal High-Value Customer": "Scale",
+        "Premium Growth Candidate": "Scale / Test",
+        "High-Utilization Revolver": "Test / Constrain",
+        "Underused Low-Risk Customer": "Test",
+        "Dormant but Recoverable": "Test",
+        "Risk Watch": "Block",
+    }
+
+    plot_df["strategy_decision"] = plot_df["customer_segment"].map(decision_map).fillna("Review")
+    plot_df["avg_default_probability_pct"] = plot_df["avg_default_probability"] * 100
+
+    fig = px.scatter(
+        plot_df,
+        x="avg_default_probability_pct",
+        y="avg_risk_adjusted_profit",
+        size="customer_count",
+        color="strategy_decision",
+        hover_name="customer_segment",
+        hover_data={
+            "customer_count": ":,",
+            "avg_default_probability_pct": ":.2f",
+            "avg_risk_adjusted_profit": ":.2f",
+            "avg_expected_roi": ":.2f",
+            "campaign_eligible_rate": ":.2%",
+            "strategy_decision": True,
+        },
+        title="Segment Risk-Return Matrix",
+        labels={
+            "avg_default_probability_pct": "Average default probability (%)",
+            "avg_risk_adjusted_profit": "Average risk-adjusted profit",
+            "strategy_decision": "Strategy decision",
+            "customer_count": "Customer count",
+        },
+        size_max=58,
+    )
+
+    fig.add_hline(
+        y=0,
+        line_dash="dash",
+        line_color="#9ca3af",
+        annotation_text="Profit break-even",
+        annotation_position="bottom right",
+    )
+
+    fig.update_layout(
+        height=520,
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        margin=dict(l=30, r=30, t=70, b=30),
+        legend_title_text="Strategy decision",
+        font=dict(family="Arial", size=12, color=COLORS["text"]),
+    )
+
+    fig.update_xaxes(showgrid=True, gridcolor="#e5e7eb", zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor="#e5e7eb", zeroline=False, tickprefix="$")
+
+    return fig
+
+
+def create_strategy_risk_return_section() -> html.Div:
+    return html.Div(
+        children=[
+            html.H3(
+                "Risk-Return Matrix",
+                style={"fontSize": "22px", "fontWeight": "900", "margin": "0 0 8px 0"},
+            ),
+            html.P(
+                "This view explains why some segments are ready to scale while others should be tested, constrained, or blocked. Higher profit is better, but higher default probability requires stronger guardrails.",
+                style={"color": COLORS["muted"], "lineHeight": "1.5", "margin": "0 0 14px 0"},
+            ),
+            dcc.Graph(
+                figure=build_strategy_risk_return_figure(),
+                config={"displayModeBar": True},
+            ),
+        ],
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "22px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+            "marginTop": "18px",
+        },
+    )
+
+
 def create_strategy_playbook_table() -> html.Div:
     rows = [
         {
@@ -3189,17 +3403,12 @@ app.layout = html.Div(
                             "This page translates the analytics into a practical operating playbook. It shows what each customer segment should receive, which campaigns fit, where to scale, where to test, where to constrain, and where guardrails should stop launch.",
                         ),
                         create_strategy_cta_panel(),
+                        create_strategy_flow_diagram(),
+                        create_strategy_risk_return_section(),
                         create_strategy_playbook_table(),
-                        html.Div(
-                            children=[
-                                create_chart_card("Recommended Action Mix", "Portfolio-level action mix behind the playbook.", action_fig, "offer-action-mix-chart"),
-                                create_chart_card("Treatment Type Distribution", "Offer or treatment categories assigned by the decision engine.", offer_fig, "offer-type-chart"),
-                            ],
-                            style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "18px", "marginTop": "18px"},
-                        ),
                         create_insight_card(
                             "How to read this playbook",
-                            "The playbook does not replace campaign testing. It organizes the decision path: pick the campaign, simulate impact, design the test, export the customer list, and review guardrails before launch.",
+                            "Use this page as the business decision layer. The flow sketch explains the end-to-end process, the risk-return matrix shows why each segment needs a different rollout posture, and the playbook table turns the analysis into segment-level actions.",
                         ),
                     ],
                 ),
