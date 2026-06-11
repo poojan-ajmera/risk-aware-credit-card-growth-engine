@@ -12,6 +12,8 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 FEATURES_PATH = BASE_DIR / "data" / "processed" / "customer_features.csv"
 SEGMENT_PATH = BASE_DIR / "data" / "processed" / "segment_summary.csv"
 PORTFOLIO_KPI_PATH = BASE_DIR / "data" / "processed" / "portfolio_kpis.csv"
+CAMPAIGN_LIBRARY_PATH = BASE_DIR / "data" / "campaigns" / "campaign_library.csv"
+CAMPAIGN_RECOMMENDATIONS_PATH = BASE_DIR / "data" / "campaigns" / "campaign_recommendations.csv"
 
 
 COLORS = {
@@ -23,6 +25,7 @@ COLORS = {
     "navy": "#111827",
     "blue": "#2563eb",
     "light_blue": "#eff6ff",
+    "soft_blue": "#eff6ff",
     "orange_light": "#fff7ed",
     "orange_border": "#fed7aa",
 }
@@ -109,6 +112,26 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     portfolio_kpis = pd.read_csv(PORTFOLIO_KPI_PATH)
 
     return customer_features, segment_summary, portfolio_kpis
+
+
+def load_campaign_data() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load campaign-level files only.
+
+    This keeps the Dash app lightweight. Large customer-level scoring should
+    happen upstream in scripts or warehouse jobs, not inside the dashboard.
+    """
+    if CAMPAIGN_LIBRARY_PATH.exists():
+        campaign_library = pd.read_csv(CAMPAIGN_LIBRARY_PATH)
+    else:
+        campaign_library = pd.DataFrame()
+
+    if CAMPAIGN_RECOMMENDATIONS_PATH.exists():
+        campaign_recommendations = pd.read_csv(CAMPAIGN_RECOMMENDATIONS_PATH)
+    else:
+        campaign_recommendations = pd.DataFrame()
+
+    return campaign_library, campaign_recommendations
+
 
 def format_currency(value: float) -> str:
     return f"${value:,.0f}"
@@ -266,8 +289,79 @@ def create_placeholder_card(title: str, text: str) -> html.Div:
 
 
 def create_table(rows) -> html.Table:
+    """Render a simple table from either html.Tr rows or list-of-dict records."""
+    if not rows:
+        return html.Table(
+            [
+                html.Tr(
+                    [
+                        html.Td(
+                            "No rows available.",
+                            style={
+                                "padding": "12px",
+                                "color": COLORS["muted"],
+                                "borderBottom": f"1px solid {COLORS['border']}",
+                            },
+                        )
+                    ]
+                )
+            ],
+            style={
+                "width": "100%",
+                "borderCollapse": "collapse",
+                "fontSize": "14px",
+            },
+        )
+
+    # Newer sections pass rows as list[dict]. Convert them into html rows.
+    if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+        columns = list(rows[0].keys())
+
+        header = html.Tr(
+            [
+                html.Th(
+                    column,
+                    style={
+                        "textAlign": "left",
+                        "padding": "10px 12px",
+                        "fontSize": "12px",
+                        "fontWeight": "900",
+                        "color": COLORS["muted"],
+                        "textTransform": "uppercase",
+                        "borderBottom": f"1px solid {COLORS['border']}",
+                        "whiteSpace": "nowrap",
+                    },
+                )
+                for column in columns
+            ]
+        )
+
+        body = [
+            html.Tr(
+                [
+                    html.Td(
+                        str(row.get(column, "")),
+                        style={
+                            "padding": "10px 12px",
+                            "borderBottom": f"1px solid {COLORS['border']}",
+                            "color": COLORS["text"],
+                            "verticalAlign": "top",
+                            "whiteSpace": "nowrap" if column not in ["Campaign"] else "normal",
+                        },
+                    )
+                    for column in columns
+                ]
+            )
+            for row in rows
+        ]
+
+        table_children = [header] + body
+    else:
+        # Older sections already pass html.Tr rows.
+        table_children = rows
+
     return html.Table(
-        rows,
+        table_children,
         style={
             "width": "100%",
             "borderCollapse": "collapse",
@@ -276,8 +370,162 @@ def create_table(rows) -> html.Table:
     )
 
 
+
+
+def create_campaign_table_rows(campaign_recommendations: pd.DataFrame, limit: int = 10) -> list[dict]:
+    """Build a compact dashboard table from campaign-level recommendation output."""
+    if campaign_recommendations.empty:
+        return []
+
+    required_columns = [
+        "dashboard_recommendation_rank",
+        "campaign_name",
+        "campaign_family",
+        "risk_level",
+        "recommended_rollout_decision",
+        "eligible_customers",
+        "scale_customers",
+        "blocked_customers",
+        "expected_campaign_profit",
+        "expected_campaign_roi",
+        "campaign_score",
+    ]
+
+    missing_columns = [
+        column for column in required_columns
+        if column not in campaign_recommendations.columns
+    ]
+
+    if missing_columns:
+        raise ValueError(
+            "Campaign recommendations missing required columns: "
+            + ", ".join(missing_columns)
+        )
+
+    table = campaign_recommendations.head(limit).copy()
+
+    table["Expected Profit"] = table["expected_campaign_profit"].apply(format_currency)
+    table["Expected ROI"] = table["expected_campaign_roi"].apply(lambda value: f"{value:.2f}x")
+    table["Eligible Customers"] = table["eligible_customers"].apply(lambda value: f"{int(value):,}")
+    table["Scale Customers"] = table["scale_customers"].apply(lambda value: f"{int(value):,}")
+    table["Blocked Customers"] = table["blocked_customers"].apply(lambda value: f"{int(value):,}")
+    table["Score"] = table["campaign_score"].apply(lambda value: f"{value:.1f}")
+
+    return table[
+        [
+            "dashboard_recommendation_rank",
+            "campaign_name",
+            "campaign_family",
+            "risk_level",
+            "recommended_rollout_decision",
+            "Eligible Customers",
+            "Scale Customers",
+            "Blocked Customers",
+            "Expected Profit",
+            "Expected ROI",
+            "Score",
+        ]
+    ].rename(
+        columns={
+            "dashboard_recommendation_rank": "Rank",
+            "campaign_name": "Campaign",
+            "campaign_family": "Family",
+            "risk_level": "Risk",
+            "recommended_rollout_decision": "Rollout",
+        }
+    ).to_dict("records")
+
+
 customer_features, segment_summary, portfolio_kpis = load_data()
+campaign_library, campaign_recommendations = load_campaign_data()
 kpis = portfolio_kpis.iloc[0]
+
+
+if campaign_recommendations.empty:
+    campaign_top10 = pd.DataFrame()
+    campaign_family_fig = create_empty_figure("Campaign recommendation data is not available.")
+    campaign_rollout_fig = create_empty_figure("Campaign recommendation data is not available.")
+    campaign_profit_fig = create_empty_figure("Campaign recommendation data is not available.")
+    campaign_table_rows = []
+    total_campaigns_available = 0
+    top_campaign_profit = 0
+    top_campaign_eligible = 0
+    top_campaign_scale = 0
+else:
+    campaign_top10 = campaign_recommendations.head(10).copy()
+    total_campaigns_available = len(campaign_recommendations)
+    top_campaign_profit = campaign_top10["expected_campaign_profit"].sum()
+    top_campaign_eligible = campaign_top10["eligible_customers"].sum()
+    top_campaign_scale = campaign_top10["scale_customers"].sum()
+    campaign_table_rows = create_campaign_table_rows(campaign_recommendations, limit=10)
+
+    campaign_family_counts = (
+        campaign_top10.groupby("campaign_family", as_index=False)
+        .agg(campaign_count=("campaign_id", "count"))
+        .sort_values("campaign_count", ascending=True)
+    )
+
+    campaign_family_fig = px.bar(
+        campaign_family_counts,
+        x="campaign_count",
+        y="campaign_family",
+        orientation="h",
+        title="Top Campaign Families",
+        labels={
+            "campaign_count": "Campaigns",
+            "campaign_family": "Campaign Family",
+        },
+    )
+    campaign_family_fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        height=340,
+        margin=dict(l=20, r=20, t=55, b=30),
+        font=dict(family="Arial", color=COLORS["text"]),
+    )
+
+    rollout_counts = (
+        campaign_top10.groupby("recommended_rollout_decision", as_index=False)
+        .agg(campaign_count=("campaign_id", "count"))
+        .sort_values("campaign_count", ascending=False)
+    )
+
+    campaign_rollout_fig = px.pie(
+        rollout_counts,
+        names="recommended_rollout_decision",
+        values="campaign_count",
+        hole=0.55,
+        title="Recommended Rollout Mix",
+    )
+    campaign_rollout_fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        height=340,
+        margin=dict(l=20, r=20, t=55, b=30),
+        font=dict(family="Arial", color=COLORS["text"]),
+    )
+
+    profit_chart_data = campaign_top10.sort_values("expected_campaign_profit", ascending=True)
+
+    campaign_profit_fig = px.bar(
+        profit_chart_data,
+        x="expected_campaign_profit",
+        y="campaign_name",
+        orientation="h",
+        title="Expected Campaign Profit by Recommendation",
+        labels={
+            "expected_campaign_profit": "Expected Profit",
+            "campaign_name": "Campaign",
+        },
+    )
+    campaign_profit_fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        height=460,
+        margin=dict(l=20, r=20, t=55, b=30),
+        font=dict(family="Arial", color=COLORS["text"]),
+    )
+
 
 decision_counts = customer_features["decision_status"].value_counts().reset_index()
 decision_counts.columns = ["decision_status", "customer_count"]
@@ -546,6 +794,289 @@ for _, row in priority_table_display.iterrows():
     priority_rows.append(html.Tr([html.Td(row[col], style=cell_style) for col in priority_table_display.columns]))
 
 
+
+
+
+def format_large_number(value: float) -> str:
+    if pd.isna(value):
+        return "0"
+
+    value = float(value)
+
+    if abs(value) >= 1_000_000:
+        return f"{value / 1_000_000:.1f}M"
+
+    if abs(value) >= 1_000:
+        return f"{value / 1_000:.1f}K"
+
+    return f"{value:,.0f}"
+
+
+def create_metric_chip(label: str, value: str) -> html.Div:
+    return html.Div(
+        children=[
+            html.Div(
+                label,
+                style={
+                    "fontSize": "11px",
+                    "fontWeight": "800",
+                    "color": COLORS["muted"],
+                    "textTransform": "uppercase",
+                },
+            ),
+            html.Div(
+                value,
+                style={
+                    "fontSize": "15px",
+                    "fontWeight": "900",
+                    "color": COLORS["text"],
+                    "marginTop": "2px",
+                },
+            ),
+        ],
+        style={
+            "backgroundColor": COLORS["soft_blue"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "14px",
+            "padding": "10px",
+        },
+    )
+
+
+def create_campaign_recommendation_card(row: pd.Series) -> html.Div:
+    rollout = row.get("recommended_rollout_decision", "Unknown")
+
+    rollout_colors = {
+        "Scale": "#16a34a",
+        "Test": "#7c3aed",
+        "Constrain": "#f97316",
+        "Do Not Launch": "#64748b",
+        "Block": "#dc2626",
+    }
+
+    accent = rollout_colors.get(rollout, "#2563eb")
+
+    return html.Div(
+        children=[
+            html.Div(
+                children=[
+                    html.Div(
+                        f"#{int(row.get('dashboard_recommendation_rank', 0))}",
+                        style={
+                            "fontSize": "13px",
+                            "fontWeight": "900",
+                            "color": "white",
+                            "backgroundColor": accent,
+                            "borderRadius": "999px",
+                            "padding": "6px 10px",
+                            "display": "inline-block",
+                        },
+                    ),
+                    html.Div(
+                        rollout,
+                        style={
+                            "fontSize": "12px",
+                            "fontWeight": "800",
+                            "color": accent,
+                            "backgroundColor": f"{accent}18",
+                            "border": f"1px solid {accent}33",
+                            "borderRadius": "999px",
+                            "padding": "6px 10px",
+                        },
+                    ),
+                ],
+                style={
+                    "display": "flex",
+                    "justifyContent": "space-between",
+                    "alignItems": "center",
+                    "marginBottom": "12px",
+                },
+            ),
+            html.H3(
+                row.get("campaign_name", "Campaign"),
+                style={
+                    "fontSize": "18px",
+                    "fontWeight": "900",
+                    "margin": "0 0 6px 0",
+                    "color": COLORS["text"],
+                },
+            ),
+            html.Div(
+                row.get("campaign_family", "Campaign Family"),
+                style={
+                    "fontSize": "13px",
+                    "fontWeight": "700",
+                    "color": COLORS["muted"],
+                    "marginBottom": "12px",
+                },
+            ),
+            html.P(
+                row.get("business_goal", ""),
+                style={
+                    "fontSize": "13px",
+                    "lineHeight": "1.5",
+                    "color": COLORS["muted"],
+                    "margin": "0 0 14px 0",
+                },
+            ),
+            html.Div(
+                children=[
+                    create_metric_chip("Eligible", format_large_number(row.get("eligible_customers", 0))),
+                    create_metric_chip("Scale", format_large_number(row.get("scale_customers", 0))),
+                    create_metric_chip("Profit", format_currency(row.get("expected_campaign_profit", 0))),
+                    create_metric_chip("ROI", f"{row.get('expected_campaign_roi', 0):.2f}x"),
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "1fr 1fr",
+                    "gap": "10px",
+                },
+            ),
+        ],
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderTop": f"5px solid {accent}",
+            "borderRadius": "18px",
+            "padding": "18px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+        },
+    )
+
+
+def create_campaign_table_rows(campaign_recommendations: pd.DataFrame, limit: int = 10) -> list[dict]:
+    if campaign_recommendations.empty:
+        return []
+
+    table = campaign_recommendations.head(limit).copy()
+
+    table["Expected Profit"] = table["expected_campaign_profit"].apply(format_currency)
+    table["Expected ROI"] = table["expected_campaign_roi"].apply(lambda value: f"{value:.2f}x")
+    table["Eligible Customers"] = table["eligible_customers"].apply(lambda value: f"{int(value):,}")
+    table["Scale Customers"] = table["scale_customers"].apply(lambda value: f"{int(value):,}")
+    table["Blocked Customers"] = table["blocked_customers"].apply(lambda value: f"{int(value):,}")
+    table["Score"] = table["campaign_score"].apply(lambda value: f"{value:.1f}")
+
+    return table[
+        [
+            "dashboard_recommendation_rank",
+            "campaign_name",
+            "campaign_family",
+            "risk_level",
+            "recommended_rollout_decision",
+            "Eligible Customers",
+            "Scale Customers",
+            "Blocked Customers",
+            "Expected Profit",
+            "Expected ROI",
+            "Score",
+        ]
+    ].rename(
+        columns={
+            "dashboard_recommendation_rank": "Rank",
+            "campaign_name": "Campaign",
+            "campaign_family": "Family",
+            "risk_level": "Risk",
+            "recommended_rollout_decision": "Rollout",
+        }
+    ).to_dict("records")
+
+
+def create_campaign_detail_panel(campaign_recommendations: pd.DataFrame) -> html.Div:
+    if campaign_recommendations.empty:
+        return create_insight_card(
+            "Campaign Detail",
+            "Campaign recommendation data is not available yet. Run src/generate_campaign_library.py and src/score_campaign_recommendations.py first.",
+        )
+
+    top_campaign = campaign_recommendations.iloc[0]
+
+    return html.Div(
+        children=[
+            html.H3(
+                "Top Campaign Detail",
+                style={
+                    "fontSize": "20px",
+                    "fontWeight": "900",
+                    "margin": "0 0 12px 0",
+                    "color": COLORS["text"],
+                },
+            ),
+            html.Div(
+                top_campaign["campaign_name"],
+                style={
+                    "fontSize": "24px",
+                    "fontWeight": "900",
+                    "color": COLORS["text"],
+                    "marginBottom": "8px",
+                },
+            ),
+            html.Div(
+                f"{top_campaign['campaign_family']} • {top_campaign['campaign_type']} • {top_campaign['risk_level']} risk",
+                style={
+                    "fontSize": "14px",
+                    "fontWeight": "700",
+                    "color": COLORS["muted"],
+                    "marginBottom": "14px",
+                },
+            ),
+            html.P(
+                top_campaign["offer_description"],
+                style={
+                    "fontSize": "14px",
+                    "lineHeight": "1.6",
+                    "color": COLORS["muted"],
+                    "margin": "0 0 14px 0",
+                },
+            ),
+            html.Div(
+                children=[
+                    create_metric_chip("Target Segments", top_campaign["target_segments"]),
+                    create_metric_chip("Success Metric", top_campaign["primary_success_metric"]),
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "1fr 1fr",
+                    "gap": "12px",
+                    "marginBottom": "12px",
+                },
+            ),
+            html.Div(
+                children=[
+                    html.Div(
+                        "Guardrail Notes",
+                        style={
+                            "fontSize": "13px",
+                            "fontWeight": "900",
+                            "color": COLORS["text"],
+                            "marginBottom": "6px",
+                        },
+                    ),
+                    html.Div(
+                        top_campaign["guardrail_notes"],
+                        style={
+                            "fontSize": "13px",
+                            "lineHeight": "1.5",
+                            "color": COLORS["muted"],
+                        },
+                    ),
+                ],
+                style={
+                    "backgroundColor": "#fff7ed",
+                    "border": "1px solid #fed7aa",
+                    "borderRadius": "14px",
+                    "padding": "14px",
+                },
+            ),
+        ],
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "20px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+        },
+    )
 
 
 def create_filter_panel() -> html.Div:
@@ -1698,6 +2229,141 @@ app.layout = html.Div(
                         create_insight_card(
                             "Segment-Level Takeaway",
                             "Core Customer and Loyal High-Value Customer are the strongest broad-scale opportunities. High-Utilization Revolvers may show financial value, but should remain a controlled test and guardrail segment.",
+                        ),
+                    ],
+                ),
+                dcc.Tab(
+                    label="Campaigns & Offers",
+                    style=tab_style,
+                    selected_style=selected_tab_style,
+                    children=[
+                        create_tab_intro(
+                            "Campaign Recommendation Engine",
+                            "This page ranks campaign opportunities from a reusable campaign library. It shows which campaigns are viable for the current portfolio, where to scale, where to test, and where risk should constrain rollout.",
+                        ),
+                        html.Div(
+                            children=[
+                                create_kpi_card(
+                                    "Campaign Templates",
+                                    f"{total_campaigns_available:,}",
+                                    "Available campaign options scored",
+                                    "#2563eb",
+                                ),
+                                create_kpi_card(
+                                    "Top-10 Expected Profit",
+                                    format_currency(top_campaign_profit),
+                                    "Projected profit from recommended campaigns",
+                                    "#16a34a",
+                                ),
+                                create_kpi_card(
+                                    "Top-10 Eligible Customers",
+                                    f"{int(top_campaign_eligible):,}",
+                                    "Customer-campaign matches passing guardrails",
+                                    "#7c3aed",
+                                ),
+                                create_kpi_card(
+                                    "Top-10 Scale Customers",
+                                    f"{int(top_campaign_scale):,}",
+                                    "Customers recommended for broad rollout",
+                                    "#0ea5e9",
+                                ),
+                            ],
+                            style={
+                                "display": "grid",
+                                "gridTemplateColumns": "repeat(4, 1fr)",
+                                "gap": "16px",
+                                "marginTop": "22px",
+                                "marginBottom": "18px",
+                            },
+                        ),
+                        html.Div(
+                            children=[
+                                create_chart_card(
+                                    "Campaign Family Mix",
+                                    "Family distribution across the top recommended campaigns.",
+                                    campaign_family_fig,
+                                    "campaign-family-mix-chart",
+                                ),
+                                create_chart_card(
+                                    "Rollout Recommendation Mix",
+                                    "How top campaigns split across Scale, Test, and Constrain decisions.",
+                                    campaign_rollout_fig,
+                                    "campaign-rollout-mix-chart",
+                                ),
+                            ],
+                            style={
+                                "display": "grid",
+                                "gridTemplateColumns": "1fr 1fr",
+                                "gap": "18px",
+                                "marginTop": "22px",
+                            },
+                        ),
+                        html.Div(style={"height": "18px"}),
+                        create_chart_card(
+                            "Profit Potential",
+                            "Expected campaign profit across the current top recommendations.",
+                            campaign_profit_fig,
+                            "campaign-profit-chart",
+                        ),
+                        html.Div(
+                            children=[
+                                html.H3(
+                                    "Top Recommended Campaigns",
+                                    style={
+                                        "margin": "0 0 14px 0",
+                                        "fontSize": "20px",
+                                        "fontWeight": "900",
+                                    },
+                                ),
+                                html.Div(
+                                    children=[
+                                        create_campaign_recommendation_card(row)
+                                        for _, row in campaign_top10.iterrows()
+                                    ],
+                                    style={
+                                        "display": "grid",
+                                        "gridTemplateColumns": "repeat(2, 1fr)",
+                                        "gap": "16px",
+                                    },
+                                ),
+                            ],
+                            style={"marginTop": "18px"},
+                        ),
+                        html.Div(
+                            children=[
+                                html.Div(
+                                    children=[
+                                        html.H3(
+                                            "Campaign Recommendation Table",
+                                            style={
+                                                "margin": "0 0 14px 0",
+                                                "fontSize": "20px",
+                                                "fontWeight": "900",
+                                            },
+                                        ),
+                                        create_table(campaign_table_rows),
+                                    ],
+                                    style={
+                                        "backgroundColor": COLORS["card"],
+                                        "border": f"1px solid {COLORS['border']}",
+                                        "borderRadius": "18px",
+                                        "padding": "20px",
+                                        "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                                        "overflowX": "auto",
+                                    },
+                                ),
+                                create_campaign_detail_panel(campaign_recommendations),
+                            ],
+                            style={
+                                "display": "grid",
+                                "gridTemplateColumns": "1.35fr 0.85fr",
+                                "gap": "18px",
+                                "marginTop": "18px",
+                            },
+                        ),
+                        create_insight_card(
+                            "Why this page matters",
+                            "The campaign layer connects customer segmentation to business action. It helps a user choose which campaigns to run, where to scale, where to test, and where risk guardrails should constrain rollout.",
                         ),
                     ],
                 ),
