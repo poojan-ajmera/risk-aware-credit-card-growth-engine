@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, dcc, html, dash_table
+from dash import Dash, Input, Output, State, callback_context, dcc, html, dash_table
 from dash.exceptions import PreventUpdate
 
 
@@ -140,6 +140,28 @@ def format_currency(value: float) -> str:
 
 def format_percent(value: float) -> str:
     return f"{value * 100:.1f}%"
+
+
+def help_label(text: str, help_text: str) -> html.Span:
+    return html.Span(
+        [
+            text,
+            html.Span(
+                " ⓘ",
+                style={
+                    "fontSize": "12px",
+                    "color": COLORS["muted"],
+                    "fontWeight": "800",
+                },
+            ),
+        ],
+        title=help_text,
+        style={
+            "fontWeight": "800",
+            "cursor": "help",
+            "display": "inline-block",
+        },
+    )
 
 
 def create_kpi_card(title: str, value: str, note: str, accent: str = "#2563eb") -> html.Div:
@@ -1087,6 +1109,243 @@ def create_campaign_detail_panel(campaign_recommendations: pd.DataFrame) -> html
     )
 
 
+
+def create_color_legend() -> html.Details:
+    legend_items = [
+        ("Scale", "#16a34a", "Ready for broader rollout when economics and risk are acceptable."),
+        ("Test", "#2563eb", "Run a controlled experiment before scaling."),
+        ("Constrain", "#f97316", "Potential opportunity, but rollout should be limited by risk or uncertainty."),
+        ("Block", "#dc2626", "Do not target because guardrails or risk rules are triggered."),
+        ("Do Not Launch", "#9ca3af", "Not enough upside or not a strong campaign fit."),
+    ]
+
+    return html.Details(
+        children=[
+            html.Summary(
+                "Decision legend: what the colors mean",
+                style={
+                    "cursor": "pointer",
+                    "fontWeight": "900",
+                    "fontSize": "15px",
+                    "color": COLORS["text"],
+                    "padding": "12px 14px",
+                },
+            ),
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div(
+                                style={
+                                    "width": "10px",
+                                    "height": "10px",
+                                    "borderRadius": "999px",
+                                    "backgroundColor": color,
+                                    "flexShrink": "0",
+                                    "marginTop": "4px",
+                                },
+                            ),
+                            html.Div(
+                                children=[
+                                    html.Div(label, style={"fontWeight": "900", "fontSize": "13px"}),
+                                    html.Div(description, style={"fontSize": "12px", "color": COLORS["muted"], "lineHeight": "1.35"}),
+                                ],
+                            ),
+                        ],
+                        title=description,
+                        style={
+                            "display": "flex",
+                            "gap": "9px",
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderRadius": "12px",
+                            "padding": "10px",
+                            "backgroundColor": "#ffffff",
+                        },
+                    )
+                    for label, color, description in legend_items
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "repeat(5, 1fr)",
+                    "gap": "10px",
+                    "padding": "0 14px 14px 14px",
+                },
+            ),
+        ],
+        open=False,
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "16px",
+            "marginBottom": "12px",
+            "boxShadow": "0 6px 16px rgba(15, 23, 42, 0.04)",
+        },
+    )
+
+
+def create_workflow_guide() -> html.Details:
+    steps = [
+        ("1", "Review portfolio", "Start with Overview and Segment Strategy.", "Open Overview", "guide-open-overview"),
+        ("2", "Choose campaign", "Use Campaigns & Offers to pick a recommended campaign.", "Open Campaigns", "guide-open-campaigns"),
+        ("3", "Simulate impact", "Use Scenario Simulator to test cost, lift, risk, and profit.", "Open Scenario", "guide-open-scenario"),
+        ("4", "Design experiment", "Use A/B Planner to size control and treatment groups.", "Open A/B Planner", "guide-open-ab"),
+        ("5", "Export customers", "Download eligible, test, scale, or blocked audiences.", "Open Export", "guide-open-export"),
+        ("6", "Check guardrails", "Review risk controls before rollout.", "Open Guardrails", "guide-open-guardrails"),
+    ]
+
+    return html.Details(
+        children=[
+            html.Summary(
+                "How to use this dashboard",
+                title="Expand this section for a step-by-step workflow across the dashboard.",
+                style={
+                    "cursor": "pointer",
+                    "fontWeight": "900",
+                    "fontSize": "15px",
+                    "color": COLORS["text"],
+                    "padding": "12px 14px",
+                },
+            ),
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div(
+                                number,
+                                style={
+                                    "width": "24px",
+                                    "height": "24px",
+                                    "borderRadius": "999px",
+                                    "backgroundColor": COLORS["blue"],
+                                    "color": "white",
+                                    "display": "flex",
+                                    "alignItems": "center",
+                                    "justifyContent": "center",
+                                    "fontWeight": "900",
+                                    "fontSize": "12px",
+                                    "marginBottom": "8px",
+                                },
+                            ),
+                            html.Div(title, style={"fontWeight": "900", "fontSize": "13px", "marginBottom": "4px"}),
+                            html.Div(detail, style={"fontSize": "12px", "color": COLORS["muted"], "lineHeight": "1.35", "marginBottom": "10px"}),
+                            html.Button(
+                                button_text,
+                                id=button_id,
+                                n_clicks=0,
+                                title=f"Go to: {title}",
+                                style={
+                                    "border": "none",
+                                    "borderRadius": "10px",
+                                    "backgroundColor": COLORS["blue"],
+                                    "color": "white",
+                                    "fontWeight": "900",
+                                    "fontSize": "12px",
+                                    "padding": "8px 10px",
+                                    "cursor": "pointer",
+                                },
+                            ),
+                        ],
+                        title=detail,
+                        style={
+                            "backgroundColor": "#f8fafc",
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderRadius": "12px",
+                            "padding": "10px",
+                        },
+                    )
+                    for number, title, detail, button_text, button_id in steps
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "repeat(6, 1fr)",
+                    "gap": "10px",
+                    "padding": "0 14px 14px 14px",
+                },
+            ),
+        ],
+        open=False,
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "16px",
+            "marginBottom": "12px",
+            "boxShadow": "0 6px 16px rgba(15, 23, 42, 0.04)",
+        },
+    )
+
+
+def create_action_prompt_panel() -> html.Details:
+    actions = [
+        ("Campaign decision", "Use Campaigns & Offers to decide which campaign deserves scale, test, or constraint.", "Open Campaigns", "action-open-campaigns"),
+        ("Customer action", "Use Customer Lookup and Export Center to inspect who is included before campaign execution.", "Open Customer Tools", "action-open-customer-tools"),
+        ("Risk action", "Use Guardrails before launch to avoid risky growth and protect sensitive audiences.", "Open Guardrails", "action-open-guardrails"),
+    ]
+
+    return html.Details(
+        children=[
+            html.Summary(
+                "What should I do next?",
+                title="Expand this section for quick actions based on the current workflow.",
+                style={
+                    "cursor": "pointer",
+                    "fontWeight": "900",
+                    "fontSize": "15px",
+                    "color": COLORS["text"],
+                    "padding": "12px 14px",
+                },
+            ),
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div(title, style={"fontWeight": "900", "fontSize": "13px", "marginBottom": "4px"}),
+                            html.Div(body, style={"fontSize": "12px", "color": COLORS["muted"], "lineHeight": "1.35", "marginBottom": "10px"}),
+                            html.Button(
+                                button_text,
+                                id=button_id,
+                                n_clicks=0,
+                                title=body,
+                                style={
+                                    "border": "none",
+                                    "borderRadius": "10px",
+                                    "backgroundColor": COLORS["blue"],
+                                    "color": "white",
+                                    "fontWeight": "900",
+                                    "fontSize": "12px",
+                                    "padding": "8px 10px",
+                                    "cursor": "pointer",
+                                },
+                            ),
+                        ],
+                        title=body,
+                        style={
+                            "backgroundColor": "#ffffff",
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderRadius": "12px",
+                            "padding": "10px",
+                        },
+                    )
+                    for title, body, button_text, button_id in actions
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "repeat(3, 1fr)",
+                    "gap": "10px",
+                    "padding": "0 14px 14px 14px",
+                },
+            ),
+        ],
+        open=False,
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "16px",
+            "marginBottom": "12px",
+            "boxShadow": "0 6px 16px rgba(15, 23, 42, 0.04)",
+        },
+    )
+
+
 def create_filter_panel() -> html.Div:
     segment_options = [
         {"label": segment, "value": segment}
@@ -1808,7 +2067,7 @@ def build_decision_workbench_layout() -> html.Div:
                             ),
                             dcc.Tab(
                                 label="Scenario Simulator",
-                                value="scenario",
+                                value="scenario-simulator",
                                 children=[build_scenario_simulator_layout()],
                                 selected_style={
                                     "backgroundColor": COLORS["blue"],
@@ -1831,7 +2090,7 @@ def build_decision_workbench_layout() -> html.Div:
                             ),
                             dcc.Tab(
                                 label="A/B Test Planner",
-                                value="ab-test",
+                                value="ab-test-planner",
                                 children=[build_ab_test_planner_layout()],
                                 selected_style={
                                     "backgroundColor": COLORS["blue"],
@@ -1933,7 +2192,7 @@ def build_scenario_simulator_layout() -> html.Div:
                                 style={"marginBottom": "18px"},
                             ),
 
-                            html.Label("Marketing Cost per Customer", style={"fontWeight": "800"}),
+                            html.Label(help_label("Marketing Cost per Customer", "Estimated cost to target one customer with this campaign, including marketing, servicing, rewards, or partner offer cost.")),
                             dcc.Slider(
                                 id="scenario-marketing-cost",
                                 min=1,
@@ -1946,7 +2205,7 @@ def build_scenario_simulator_layout() -> html.Div:
 
                             html.Div(style={"height": "22px"}),
 
-                            html.Label("Expected Spend Lift", style={"fontWeight": "800"}),
+                            html.Label(help_label("Expected Spend Lift", "Estimated percent increase in customer spend if the campaign is launched. Higher lift usually improves revenue but can also increase risk exposure.")),
                             dcc.Slider(
                                 id="scenario-spend-lift",
                                 min=-2,
@@ -1959,7 +2218,7 @@ def build_scenario_simulator_layout() -> html.Div:
 
                             html.Div(style={"height": "22px"}),
 
-                            html.Label("Max Default Probability Allowed", style={"fontWeight": "800"}),
+                            html.Label(help_label("Max Default Probability Allowed", "Risk threshold used to block customers whose estimated default probability is above the selected limit.")),
                             dcc.Slider(
                                 id="scenario-risk-threshold",
                                 min=2,
@@ -2065,7 +2324,7 @@ def build_ab_test_planner_layout() -> html.Div:
                                 style={"marginBottom": "18px"},
                             ),
 
-                            html.Label("Baseline Response Rate", style={"fontWeight": "800"}),
+                            html.Label(help_label("Baseline Response Rate", "Expected response rate without the new campaign treatment. Used as the control group benchmark in the experiment.")),
                             dcc.Slider(
                                 id="ab-baseline-rate",
                                 min=1,
@@ -2078,7 +2337,7 @@ def build_ab_test_planner_layout() -> html.Div:
 
                             html.Div(style={"height": "22px"}),
 
-                            html.Label("Expected Lift from Treatment", style={"fontWeight": "800"}),
+                            html.Label(help_label("Expected Lift from Treatment", "Expected percentage-point improvement from the treatment group compared with the control group.")),
                             dcc.Slider(
                                 id="ab-lift",
                                 min=1,
@@ -2091,7 +2350,7 @@ def build_ab_test_planner_layout() -> html.Div:
 
                             html.Div(style={"height": "22px"}),
 
-                            html.Label("Test Population Available", style={"fontWeight": "800"}),
+                            html.Label(help_label("Test Population Available", "Maximum number of eligible customers available for the A/B test after campaign targeting and guardrails.")),
                             dcc.Slider(
                                 id="ab-test-population",
                                 min=100,
@@ -2104,7 +2363,7 @@ def build_ab_test_planner_layout() -> html.Div:
 
                             html.Div(style={"height": "22px"}),
 
-                            html.Label("Control / Treatment Split", style={"fontWeight": "800"}),
+                            html.Label(help_label("Control / Treatment Split", "Share of customers assigned to control versus treatment. 50/50 is best for power, while 70/30 or 80/20 limits exposure.")),
                             dcc.Dropdown(
                                 id="ab-test-split",
                                 options=[
@@ -2117,7 +2376,7 @@ def build_ab_test_planner_layout() -> html.Div:
                                 style={"marginBottom": "18px"},
                             ),
 
-                            html.Label("Test Duration", style={"fontWeight": "800"}),
+                            html.Label(help_label("Test Duration", "Planned experiment length in weeks. Longer tests can improve confidence but delay rollout decisions.")),
                             dcc.Slider(
                                 id="ab-test-duration",
                                 min=2,
@@ -2451,10 +2710,19 @@ app.layout = html.Div(
 
         create_filter_panel(),
 
+        create_workflow_guide(),
+
+        create_color_legend(),
+
+        create_action_prompt_panel(),
+
         dcc.Tabs(
+            id="main-tabs",
+            value="overview",
             children=[
                 dcc.Tab(
                     label="Overview",
+                    value="overview",
                     style=tab_style,
                     selected_style=selected_tab_style,
                     children=[
@@ -2477,6 +2745,7 @@ app.layout = html.Div(
                 ),
                 dcc.Tab(
                     label="Segment Strategy",
+                    value="segment-strategy",
                     style=tab_style,
                     selected_style=selected_tab_style,
                     children=[
@@ -2516,6 +2785,7 @@ app.layout = html.Div(
                 ),
                 dcc.Tab(
                     label="Campaigns & Offers",
+                    value="campaigns-offers",
                     style=tab_style,
                     selected_style=selected_tab_style,
                     children=[
@@ -2651,6 +2921,7 @@ app.layout = html.Div(
                 ),
                 dcc.Tab(
                     label="Offer Engine",
+                    value="offer-engine",
                     style=tab_style,
                     selected_style=selected_tab_style,
                     children=[
@@ -2671,8 +2942,19 @@ app.layout = html.Div(
                         ),
                     ],
                 ),
-                dcc.Tab(
+                                dcc.Tab(
+                    label="Decision Workbench",
+                    value="decision-workbench",
+                    style=tab_style,
+                    selected_style=selected_tab_style,
+                    children=[
+                        build_decision_workbench_layout()
+                    ],
+                ),
+
+dcc.Tab(
                     label="Guardrails",
+                    value="guardrails",
                     style=tab_style,
                     selected_style=selected_tab_style,
                     children=[
@@ -2702,14 +2984,6 @@ app.layout = html.Div(
                             "This section separates revenue potential from responsible growth. Some customers may generate interest income, but that does not mean they should receive aggressive spend or upgrade offers.",
                             variant="warning",
                         ),
-                    ],
-                ),
-                dcc.Tab(
-                    label="Decision Workbench",
-                    style=tab_style,
-                    selected_style=selected_tab_style,
-                    children=[
-                        build_decision_workbench_layout()
                     ],
                 ),
             ],
@@ -3741,7 +4015,7 @@ def update_ab_test_planner(campaign_id: str, segment: str, baseline_rate_percent
                         children=[
                             html.Div(
                                 children=[
-                                    html.Label("Audience Type", style={"fontWeight": "800"}),
+                                    html.Label(help_label("Audience Type", "Choose which customer list to preview and download: eligible, scale, test, or blocked.")),
                                     dcc.Dropdown(
                                         id="ab-audience-type",
                                         options=[
@@ -3961,6 +4235,56 @@ def download_ab_customer_list_excel(n_clicks: int, campaign_id: str, segment: st
     filename = f"{safe_campaign_id}_{safe_segment}_{safe_audience}_customer_list.xlsx"
 
     return dcc.send_data_frame(audience_df.to_excel, filename, index=False)
+
+
+
+
+@app.callback(
+    Output("main-tabs", "value"),
+    Output("workbench-tabs", "value"),
+    Input("guide-open-overview", "n_clicks"),
+    Input("guide-open-campaigns", "n_clicks"),
+    Input("guide-open-scenario", "n_clicks"),
+    Input("guide-open-ab", "n_clicks"),
+    Input("guide-open-export", "n_clicks"),
+    Input("guide-open-guardrails", "n_clicks"),
+    Input("action-open-campaigns", "n_clicks"),
+    Input("action-open-customer-tools", "n_clicks"),
+    Input("action-open-guardrails", "n_clicks"),
+    prevent_initial_call=True,
+)
+def navigate_from_dashboard_guides(
+    guide_overview,
+    guide_campaigns,
+    guide_scenario,
+    guide_ab,
+    guide_export,
+    guide_guardrails,
+    action_campaigns,
+    action_customer_tools,
+    action_guardrails,
+):
+    trigger = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else ""
+
+    if trigger == "guide-open-overview":
+        return "overview", "customer-lookup"
+
+    if trigger in ["guide-open-campaigns", "action-open-campaigns"]:
+        return "campaigns-offers", "customer-lookup"
+
+    if trigger == "guide-open-scenario":
+        return "decision-workbench", "scenario-simulator"
+
+    if trigger in ["guide-open-ab", "guide-open-export"]:
+        return "decision-workbench", "ab-test-planner"
+
+    if trigger == "action-open-customer-tools":
+        return "decision-workbench", "customer-lookup"
+
+    if trigger in ["guide-open-guardrails", "action-open-guardrails"]:
+        return "guardrails", "customer-lookup"
+
+    raise PreventUpdate
 
 
 
