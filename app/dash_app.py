@@ -797,6 +797,13 @@ for _, row in priority_table_display.iterrows():
 
 
 
+def split_semicolon_values(value: str) -> list[str]:
+    if pd.isna(value) or str(value).strip() == "":
+        return []
+
+    return [item.strip() for item in str(value).split(";") if item.strip()]
+
+
 def format_large_number(value: float) -> str:
     if pd.isna(value):
         return "0"
@@ -1870,6 +1877,20 @@ def build_scenario_simulator_layout() -> html.Div:
         for segment in sorted(customer_features["customer_segment"].unique())
     ]
 
+    if campaign_recommendations.empty:
+        campaign_options = [{"label": "No campaign recommendations available", "value": "None"}]
+        default_campaign_id = "None"
+    else:
+        scenario_campaigns = campaign_recommendations.head(10).copy()
+        campaign_options = [
+            {
+                "label": f"{row['dashboard_recommendation_rank']}. {row['campaign_name']} ({row['recommended_rollout_decision']})",
+                "value": row["campaign_id"],
+            }
+            for _, row in scenario_campaigns.iterrows()
+        ]
+        default_campaign_id = scenario_campaigns.iloc[0]["campaign_id"]
+
     return html.Div(
         children=[
             create_tab_intro(
@@ -1882,6 +1903,26 @@ def build_scenario_simulator_layout() -> html.Div:
                     html.Div(
                         children=[
                             html.H3("Scenario Inputs", style={"marginTop": "0"}),
+
+                            html.Label("Campaign", style={"fontWeight": "800"}),
+                            dcc.Dropdown(
+                                id="scenario-campaign",
+                                options=campaign_options,
+                                value=default_campaign_id,
+                                clearable=False,
+                                style={"marginBottom": "18px"},
+                            ),
+
+                            html.Div(
+                                "Campaign assumptions auto-fill the sliders below. You can still override them manually.",
+                                style={
+                                    "fontSize": "13px",
+                                    "color": COLORS["muted"],
+                                    "lineHeight": "1.45",
+                                    "marginBottom": "18px",
+                                },
+                            ),
+
                             html.Label("Customer Segment", style={"fontWeight": "800"}),
                             dcc.Dropdown(
                                 id="scenario-segment",
@@ -2832,14 +2873,78 @@ def update_customer_lookup(selected_rows, table_data):
 
 
 @app.callback(
+    Output("scenario-marketing-cost", "value"),
+    Output("scenario-spend-lift", "value"),
+    Output("scenario-risk-threshold", "value"),
+    Input("scenario-campaign", "value"),
+)
+def sync_scenario_inputs_with_campaign(campaign_id: str):
+    if campaign_recommendations.empty or campaign_id in [None, "None"]:
+        return 5, 8, 8
+
+    selected = campaign_recommendations[
+        campaign_recommendations["campaign_id"] == campaign_id
+    ]
+
+    if selected.empty:
+        return 5, 8, 8
+
+    campaign = selected.iloc[0]
+
+    marketing_cost = int(round(float(campaign.get("cost_per_customer", 5))))
+    spend_lift = int(round(float(campaign.get("expected_lift_pct", 0.08)) * 100))
+
+    # Conservative default by campaign risk sensitivity.
+    risk_sensitivity = campaign.get("risk_sensitivity", "Medium")
+    risk_threshold_map = {
+        "Low": 10,
+        "Medium": 7,
+        "High": 5,
+        "Very High": 3,
+        "Protective": 16,
+    }
+    risk_threshold = risk_threshold_map.get(risk_sensitivity, 8)
+
+    marketing_cost = max(1, min(25, marketing_cost))
+    spend_lift = max(-2, min(20, spend_lift))
+    risk_threshold = max(2, min(20, risk_threshold))
+
+    return marketing_cost, spend_lift, risk_threshold
+
+
+@app.callback(
     Output("scenario-output", "children"),
+    Input("scenario-campaign", "value"),
     Input("scenario-segment", "value"),
     Input("scenario-marketing-cost", "value"),
     Input("scenario-spend-lift", "value"),
     Input("scenario-risk-threshold", "value"),
 )
-def update_scenario_simulator(segment: str, marketing_cost: float, spend_lift_percent: float, risk_threshold_percent: float):
+def update_scenario_simulator(campaign_id: str, segment: str, marketing_cost: float, spend_lift_percent: float, risk_threshold_percent: float):
     scenario_df = customer_features.copy()
+
+    selected_campaign = None
+
+    if not campaign_recommendations.empty and campaign_id not in [None, "None"]:
+        campaign_match = campaign_recommendations[
+            campaign_recommendations["campaign_id"] == campaign_id
+        ]
+
+        if not campaign_match.empty:
+            selected_campaign = campaign_match.iloc[0]
+
+            target_segments = split_semicolon_values(selected_campaign.get("target_segments", ""))
+            excluded_segments = split_semicolon_values(selected_campaign.get("excluded_segments", ""))
+
+            if segment == "All Segments" and target_segments:
+                scenario_df = scenario_df[
+                    scenario_df["customer_segment"].isin(target_segments)
+                ].copy()
+
+            if excluded_segments:
+                scenario_df = scenario_df[
+                    ~scenario_df["customer_segment"].isin(excluded_segments)
+                ].copy()
 
     if segment != "All Segments":
         scenario_df = scenario_df[scenario_df["customer_segment"] == segment].copy()
@@ -2847,34 +2952,91 @@ def update_scenario_simulator(segment: str, marketing_cost: float, spend_lift_pe
     spend_lift = spend_lift_percent / 100
     risk_threshold = risk_threshold_percent / 100
 
-    interchange_rate = 0.018
+    interchange_rate = 0.020
     monthly_interest_rate = 0.245 / 12
-    rewards_rate = 0.015
+    rewards_rate = 0.009
     loss_given_default = 0.72
-    campaign_horizon_months = 12
 
-    incremental_revenue = scenario_df["monthly_spend"] * spend_lift * interchange_rate
-    incremental_interest = scenario_df["revolving_balance"] * spend_lift * monthly_interest_rate
-    incremental_rewards_cost = scenario_df["monthly_spend"] * spend_lift * rewards_rate
+    campaign_horizon_months = 12
+    campaign_type = "Generic"
+
+    if selected_campaign is not None:
+        campaign_horizon_months = int(selected_campaign.get("campaign_horizon_months", 12))
+        campaign_type = str(selected_campaign.get("campaign_type", "Generic"))
+
+    # Use expected campaign cost instead of charging full cost to every customer.
+    expected_campaign_cost = marketing_cost * 0.55
+
+    if campaign_type == "Merchant-Funded Offer":
+        expected_campaign_cost = marketing_cost * 0.35
+        rewards_rate = 0.004
+    elif campaign_type in ["Digital Engagement", "Servicing Engagement", "Protective Engagement"]:
+        expected_campaign_cost = marketing_cost * 0.40
+        rewards_rate = 0.003
+
+    base_incremental_spend = scenario_df["monthly_spend"] * spend_lift * campaign_horizon_months
+
+    incremental_revenue = base_incremental_spend * interchange_rate
+    incremental_interest = 0
+    incremental_risk_savings = 0
+
+    if campaign_type == "Balance Transfer / Revolver":
+        incremental_interest = (
+            scenario_df["revolving_balance"]
+            * spend_lift
+            * monthly_interest_rate
+            * campaign_horizon_months
+        )
+        risk_cost_multiplier = 1.15
+    elif campaign_type == "Credit Line Review":
+        incremental_interest = (
+            scenario_df["revolving_balance"]
+            * spend_lift
+            * monthly_interest_rate
+            * campaign_horizon_months
+            * 0.50
+        )
+        risk_cost_multiplier = 0.95
+    elif campaign_type == "Protective Engagement":
+        expected_loss_base = (
+            scenario_df["default_probability"]
+            * scenario_df["current_balance"].clip(lower=0)
+            * loss_given_default
+        )
+        incremental_risk_savings = expected_loss_base * 0.006 * campaign_horizon_months
+        risk_cost_multiplier = 0.25
+    elif campaign_type == "Servicing Engagement":
+        expected_loss_base = (
+            scenario_df["default_probability"]
+            * scenario_df["current_balance"].clip(lower=0)
+            * loss_given_default
+        )
+        incremental_risk_savings = expected_loss_base * 0.004 * campaign_horizon_months
+        risk_cost_multiplier = 0.35
+    elif campaign_type in ["Retention", "Travel Rewards", "Lifestyle Rewards"]:
+        incremental_revenue = base_incremental_spend * (interchange_rate + 0.004)
+        risk_cost_multiplier = 0.50
+    else:
+        risk_cost_multiplier = 0.45
+
+    incremental_rewards_cost = base_incremental_spend * rewards_rate
     incremental_expected_loss = (
         scenario_df["default_probability"]
-        * scenario_df["monthly_spend"]
-        * spend_lift
+        * base_incremental_spend
         * loss_given_default
+        * risk_cost_multiplier
     )
 
     scenario_df["scenario_incremental_profit"] = (
-        campaign_horizon_months
-        * (
-            incremental_revenue
-            + incremental_interest
-            - incremental_rewards_cost
-            - incremental_expected_loss
-        )
-        - marketing_cost
+        incremental_revenue
+        + incremental_interest
+        + incremental_risk_savings
+        - incremental_rewards_cost
+        - incremental_expected_loss
+        - expected_campaign_cost
     )
 
-    scenario_df["scenario_roi"] = scenario_df["scenario_incremental_profit"] / marketing_cost
+    scenario_df["scenario_roi"] = scenario_df["scenario_incremental_profit"] / expected_campaign_cost
 
     scenario_df["scenario_decision"] = "Do Not Launch"
 
@@ -2883,6 +3045,30 @@ def update_scenario_simulator(segment: str, marketing_cost: float, spend_lift_pe
         | (scenario_df["risk_band"] == "Very High Risk")
         | (scenario_df["default_probability"] > risk_threshold)
     )
+
+    if selected_campaign is not None:
+        risk_sensitivity = selected_campaign.get("risk_sensitivity", "Medium")
+
+        if risk_sensitivity in ["High", "Very High"]:
+            block_mask = (
+                block_mask
+                | (scenario_df["late_payments_12m"] > 0)
+                | (scenario_df["risk_adjusted_profit"] < 0)
+            )
+
+        if risk_sensitivity == "Very High":
+            block_mask = (
+                block_mask
+                | (scenario_df["utilization_rate"] > 0.45)
+                | (scenario_df["credit_score"] < 700)
+            )
+
+        if risk_sensitivity == "Protective":
+            block_mask = (
+                (scenario_df["customer_segment"] == "Risk Watch")
+                | (scenario_df["risk_band"] == "Very High Risk")
+                | (scenario_df["default_probability"] > risk_threshold)
+            )
 
     scale_mask = (
         (scenario_df["scenario_roi"] >= 5)
@@ -2947,8 +3133,62 @@ def update_scenario_simulator(segment: str, marketing_cost: float, spend_lift_pe
         yaxis_title="Customer Count",
     )
 
+    if selected_campaign is None:
+        campaign_assumption_card = html.Div(
+            "No campaign selected. Scenario uses manual assumptions.",
+            style={
+                "backgroundColor": "#f8fafc",
+                "border": f"1px solid {COLORS['border']}",
+                "borderRadius": "14px",
+                "padding": "14px",
+                "marginBottom": "16px",
+                "color": COLORS["muted"],
+                "fontWeight": "700",
+            },
+        )
+    else:
+        campaign_assumption_card = html.Div(
+            children=[
+                html.Div(
+                    "Selected Campaign",
+                    style={
+                        "fontSize": "12px",
+                        "fontWeight": "900",
+                        "textTransform": "uppercase",
+                        "color": COLORS["muted"],
+                        "marginBottom": "6px",
+                    },
+                ),
+                html.Div(
+                    selected_campaign["campaign_name"],
+                    style={
+                        "fontSize": "18px",
+                        "fontWeight": "900",
+                        "color": COLORS["text"],
+                        "marginBottom": "6px",
+                    },
+                ),
+                html.Div(
+                    f"{selected_campaign['campaign_family']} • {selected_campaign['recommended_rollout_decision']} • {selected_campaign['risk_level']} risk • {campaign_horizon_months} month horizon",
+                    style={
+                        "fontSize": "13px",
+                        "fontWeight": "700",
+                        "color": COLORS["muted"],
+                    },
+                ),
+            ],
+            style={
+                "backgroundColor": COLORS["light_blue"],
+                "border": f"1px solid {COLORS['border']}",
+                "borderRadius": "14px",
+                "padding": "14px",
+                "marginBottom": "16px",
+            },
+        )
+
     return html.Div(
         children=[
+            campaign_assumption_card,
             html.Div(
                 children=[
                     create_small_metric_card("Customers in Scenario", f"{total_customers:,}", "Filtered portfolio size", "#2563eb"),
