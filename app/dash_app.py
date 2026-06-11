@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, dcc, html
+from dash import Dash, Input, Output, State, dcc, html, dash_table
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -46,10 +46,69 @@ RISK_COLOR_MAP = {
 
 def load_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     customer_features = pd.read_csv(FEATURES_PATH)
+
+    customer_profile_path = Path("data/synthetic_case_data/synthetic_customer_profiles.csv")
+
+    if customer_profile_path.exists():
+        customer_profiles = pd.read_csv(customer_profile_path)
+
+        profile_columns = [
+            "customer_id",
+            "customer_name",
+            "customer_email",
+            "phone_number",
+            "city",
+            "state",
+            "zip_code",
+            "employment_status",
+            "occupation_group",
+            "preferred_channel",
+            "relationship_tier",
+            "signup_channel",
+            "account_open_date",
+            "digital_engagement_score",
+            "last_app_login_days",
+            "autopay_enrolled",
+            "paperless_enrolled",
+            "card_type",
+            "rewards_preference",
+        ]
+
+        overlapping_profile_columns = [
+            col for col in profile_columns
+            if col in customer_features.columns and col != "customer_id"
+        ]
+
+        customer_features = customer_features.drop(
+            columns=overlapping_profile_columns,
+            errors="ignore",
+        )
+
+        customer_features = customer_features.merge(
+            customer_profiles[profile_columns],
+            on="customer_id",
+            how="left",
+        )
+    else:
+        customer_features["customer_name"] = customer_features["customer_id"].astype(str)
+        customer_features["customer_email"] = "unknown@syntheticmail.com"
+        customer_features["phone_number"] = "Unknown"
+        customer_features["city"] = "Unknown"
+        customer_features["zip_code"] = "Unknown"
+        customer_features["occupation_group"] = "Unknown"
+        customer_features["preferred_channel"] = "Unknown"
+        customer_features["relationship_tier"] = "Unknown"
+        customer_features["signup_channel"] = "Unknown"
+        customer_features["account_open_date"] = "Unknown"
+        customer_features["digital_engagement_score"] = 0
+        customer_features["last_app_login_days"] = 0
+        customer_features["autopay_enrolled"] = "Unknown"
+        customer_features["paperless_enrolled"] = "Unknown"
+
     segment_summary = pd.read_csv(SEGMENT_PATH)
     portfolio_kpis = pd.read_csv(PORTFOLIO_KPI_PATH)
-    return customer_features, segment_summary, portfolio_kpis
 
+    return customer_features, segment_summary, portfolio_kpis
 
 def format_currency(value: float) -> str:
     return f"${value:,.0f}"
@@ -660,30 +719,66 @@ def create_small_metric_card(title: str, value: str, note: str, accent: str = "#
 
 
 def build_customer_lookup_layout() -> html.Div:
-    customer_options = [
-        {
-            "label": f"{row.customer_id} | {row.customer_segment} | {row.decision_status}",
-            "value": row.customer_id,
-        }
-        for row in customer_features[
-            ["customer_id", "customer_segment", "decision_status"]
-        ].head(1000).itertuples(index=False)
+    customer_directory = customer_features[
+        [
+            "customer_id",
+            "customer_name",
+            "customer_email",
+            "city",
+            "state",
+            "customer_segment",
+            "risk_band",
+            "decision_status",
+        ]
+    ].copy()
+
+    customer_directory["location"] = customer_directory["city"] + ", " + customer_directory["state"]
+
+    customer_directory = customer_directory[
+        [
+            "customer_id",
+            "customer_name",
+            "customer_email",
+            "location",
+            "customer_segment",
+            "risk_band",
+            "decision_status",
+        ]
     ]
 
-    default_customer_id = customer_features.iloc[0]["customer_id"]
+    segment_options = [
+        {"label": segment, "value": segment}
+        for segment in sorted(customer_features["customer_segment"].unique())
+    ]
+
+    decision_options = [
+        {"label": decision, "value": decision}
+        for decision in sorted(customer_features["decision_status"].unique())
+    ]
 
     return html.Div(
         children=[
             create_tab_intro(
                 "Customer Lookup",
-                "Use this tab to inspect one customer at a time and understand why the decision engine assigned a specific segment, risk band, offer, and rollout decision. This adds explainability to the portfolio strategy.",
+                "Search the customer directory, select a customer, and review the profile, decision, risk band, recommended action, and explanation behind the engine output.",
             ),
             html.Div(
                 children=[
                     html.Div(
                         children=[
+                            html.Div(
+                                "Customer Directory",
+                                style={
+                                    "fontSize": "13px",
+                                    "fontWeight": "900",
+                                    "textTransform": "uppercase",
+                                    "letterSpacing": "1px",
+                                    "color": COLORS["blue"],
+                                    "marginBottom": "8px",
+                                },
+                            ),
                             html.H3(
-                                "Select a Customer",
+                                "Find a customer",
                                 style={
                                     "margin": "0 0 8px 0",
                                     "fontSize": "20px",
@@ -692,52 +787,154 @@ def build_customer_lookup_layout() -> html.Div:
                                 },
                             ),
                             html.P(
-                                "Choose a customer from the dropdown to view the decision profile and plain-English explanation.",
+                                "Search by ID, name, email, segment, risk, or decision. Select a row to inspect the customer decision profile.",
                                 style={
-                                    "margin": "0 0 16px 0",
+                                    "margin": "0 0 14px 0",
                                     "fontSize": "14px",
                                     "color": COLORS["muted"],
-                                    "lineHeight": "1.5",
+                                    "lineHeight": "1.45",
                                 },
                             ),
-                            dcc.Dropdown(
-                                id="customer-lookup-id",
-                                options=customer_options,
-                                value=default_customer_id,
-                                placeholder="Search or select a customer",
-                                clearable=False,
-                                searchable=True,
-                                style={"fontSize": "14px"},
+                            html.Div(
+                                children=[
+                                    dcc.Input(
+                                        id="customer-directory-search",
+                                        type="text",
+                                        placeholder="Search customer ID, name, email, segment, risk, decision...",
+                                        debounce=True,
+                                        style={
+                                            "width": "100%",
+                                            "height": "40px",
+                                            "border": f"1px solid {COLORS['border']}",
+                                            "borderRadius": "10px",
+                                            "padding": "0 12px",
+                                            "fontSize": "14px",
+                                            "boxSizing": "border-box",
+                                        },
+                                    ),
+                                    dcc.Dropdown(
+                                        id="customer-directory-segment-filter",
+                                        options=segment_options,
+                                        placeholder="All segments",
+                                        clearable=True,
+                                        style={"fontSize": "13px"},
+                                    ),
+                                    dcc.Dropdown(
+                                        id="customer-directory-decision-filter",
+                                        options=decision_options,
+                                        placeholder="All decisions",
+                                        clearable=True,
+                                        style={"fontSize": "13px"},
+                                    ),
+                                ],
+                                style={
+                                    "display": "grid",
+                                    "gridTemplateColumns": "1.4fr 0.8fr 0.8fr",
+                                    "gap": "10px",
+                                    "marginBottom": "12px",
+                                },
+                            ),
+                            dash_table.DataTable(
+                                id="customer-directory-table",
+                                data=customer_directory.head(500).to_dict("records"),
+                                columns=[
+                                    {"name": "ID", "id": "customer_id"},
+                                    {"name": "Name", "id": "customer_name"},
+                                    {"name": "Location", "id": "location"},
+                                    {"name": "Segment", "id": "customer_segment"},
+                                    {"name": "Risk", "id": "risk_band"},
+                                    {"name": "Decision", "id": "decision_status"},
+                                ],
+                                page_size=8,
+                                sort_action="native",
+                                filter_action="none",
+                                row_selectable="single",
+                                selected_rows=[0],
+                                style_table={
+                                    "overflowX": "auto",
+                                    "border": f"1px solid {COLORS['border']}",
+                                    "borderRadius": "14px",
+                                },
+                                style_header={
+                                    "backgroundColor": "#f8fafc",
+                                    "fontWeight": "900",
+                                    "color": COLORS["text"],
+                                    "borderBottom": f"1px solid {COLORS['border']}",
+                                    "fontSize": "12px",
+                                    "textTransform": "uppercase",
+                                },
+                                style_cell={
+                                    "fontFamily": "Arial, sans-serif",
+                                    "fontSize": "13px",
+                                    "padding": "9px 10px",
+                                    "textAlign": "left",
+                                    "borderBottom": f"1px solid {COLORS['border']}",
+                                    "whiteSpace": "normal",
+                                    "height": "auto",
+                                    "lineHeight": "1.25",
+                                    "minWidth": "70px",
+                                    "maxWidth": "180px",
+                                },
+                                style_cell_conditional=[
+                                    {"if": {"column_id": "customer_id"}, "width": "82px"},
+                                    {"if": {"column_id": "customer_name"}, "width": "135px"},
+                                    {"if": {"column_id": "location"}, "width": "130px"},
+                                    {"if": {"column_id": "customer_segment"}, "width": "165px"},
+                                    {"if": {"column_id": "risk_band"}, "width": "110px"},
+                                    {"if": {"column_id": "decision_status"}, "width": "115px"},
+                                ],
+                                style_data_conditional=[
+                                    {
+                                        "if": {"state": "selected"},
+                                        "backgroundColor": "#eff6ff",
+                                        "border": "1px solid #2563eb",
+                                    },
+                                    {
+                                        "if": {"filter_query": "{decision_status} = Scale"},
+                                        "color": "#166534",
+                                        "fontWeight": "800",
+                                    },
+                                    {
+                                        "if": {"filter_query": "{decision_status} = Block"},
+                                        "color": "#991b1b",
+                                        "fontWeight": "800",
+                                    },
+                                    {
+                                        "if": {"filter_query": "{decision_status} = Test"},
+                                        "color": "#1d4ed8",
+                                        "fontWeight": "800",
+                                    },
+                                ],
                             ),
                             html.Div(
                                 children=[
                                     html.Div(
-                                        "Note",
+                                        "Synthetic data note",
                                         style={
                                             "fontSize": "13px",
                                             "fontWeight": "900",
                                             "textTransform": "uppercase",
                                             "letterSpacing": "1px",
                                             "color": COLORS["blue"],
-                                            "marginBottom": "8px",
+                                            "marginBottom": "6px",
                                         },
                                     ),
                                     html.P(
-                                        "The lookup is intentionally focused on decision transparency. It is not a credit approval system and should not be treated as a production lending model.",
+                                        "Names, emails, phone numbers, and profile attributes are synthetic and used only to demonstrate how the decision engine could be inspected.",
                                         style={
                                             "margin": "0",
-                                            "fontSize": "14px",
+                                            "fontSize": "13px",
                                             "color": COLORS["muted"],
-                                            "lineHeight": "1.5",
+                                            "lineHeight": "1.45",
                                         },
                                     ),
                                 ],
                                 style={
                                     "backgroundColor": "#eff6ff",
                                     "border": "1px solid #bfdbfe",
-                                    "borderRadius": "16px",
-                                    "padding": "16px",
-                                    "marginTop": "18px",
+                                    "borderRadius": "14px",
+                                    "padding": "13px",
+                                    "marginTop": "14px",
                                 },
                             ),
                         ],
@@ -745,18 +942,20 @@ def build_customer_lookup_layout() -> html.Div:
                             "backgroundColor": "#ffffff",
                             "border": f"1px solid {COLORS['border']}",
                             "borderRadius": "20px",
-                            "padding": "22px",
+                            "padding": "18px",
                             "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                            "minWidth": "0",
                         },
                     ),
                     html.Div(
                         id="customer-lookup-output",
+                        style={"minWidth": "0"},
                     ),
                 ],
                 style={
                     "display": "grid",
-                    "gridTemplateColumns": "0.8fr 1.6fr",
-                    "gap": "18px",
+                    "gridTemplateColumns": "0.9fr 1.1fr",
+                    "gap": "16px",
                     "alignItems": "start",
                 },
             ),
@@ -858,69 +1057,136 @@ def create_explanation_list(explanations: list[str]) -> html.Div:
                     "padding": "12px 14px",
                     "fontSize": "14px",
                     "color": COLORS["text"],
-                    "lineHeight": "1.5",
-                    "marginBottom": "10px",
+                    "lineHeight": "1.45",
+                    "minWidth": "0",
                 },
             )
             for explanation in explanations
-        ]
+        ],
+        style={
+            "display": "grid",
+            "gridTemplateColumns": "repeat(2, minmax(0, 1fr))",
+            "gap": "10px",
+        },
     )
 
 
-def create_customer_profile_table(customer: pd.Series) -> html.Table:
-    rows = [
-        ("Customer ID", customer["customer_id"]),
+def create_profile_field(label: str, value: str) -> html.Div:
+    return html.Div(
+        children=[
+            html.Div(
+                label,
+                style={
+                    "fontSize": "12px",
+                    "fontWeight": "900",
+                    "textTransform": "uppercase",
+                    "letterSpacing": "0.4px",
+                    "color": COLORS["muted"],
+                    "marginBottom": "4px",
+                },
+            ),
+            html.Div(
+                value,
+                style={
+                    "fontSize": "14px",
+                    "fontWeight": "900",
+                    "color": COLORS["text"],
+                    "lineHeight": "1.25",
+                    "overflowWrap": "break-word",
+                    "wordBreak": "break-word",
+                },
+            ),
+        ],
+        style={
+            "backgroundColor": "#f8fafc",
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "12px",
+            "padding": "10px 12px",
+            "minWidth": "0",
+        },
+    )
+
+
+def create_profile_section(title: str, rows: list[tuple[str, str]], columns: int = 2) -> html.Div:
+    return html.Div(
+        children=[
+            html.H4(
+                title,
+                style={
+                    "margin": "0 0 10px 0",
+                    "fontSize": "16px",
+                    "fontWeight": "900",
+                    "color": COLORS["text"],
+                },
+            ),
+            html.Div(
+                children=[
+                    create_profile_field(label, value)
+                    for label, value in rows
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": f"repeat({columns}, minmax(0, 1fr))",
+                    "gap": "10px",
+                },
+            ),
+        ],
+        style={
+            "backgroundColor": "#ffffff",
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "16px",
+            "padding": "14px",
+            "minWidth": "0",
+        },
+    )
+
+
+def create_customer_profile_table(customer: pd.Series) -> html.Div:
+    contact_rows = [
+        ("Customer ID", str(customer["customer_id"])),
+        ("Name", customer["customer_name"]),
+        ("Email", customer["customer_email"]),
+        ("Phone", customer["phone_number"]),
+        ("Location", f"{customer['city']}, {customer['state']} {customer['zip_code']}"),
+        ("Employment", customer["employment_status"]),
+        ("Occupation", customer["occupation_group"]),
+        ("Preferred Channel", customer["preferred_channel"]),
+    ]
+
+    account_rows = [
+        ("Relationship Tier", customer["relationship_tier"]),
+        ("Signup Channel", customer["signup_channel"]),
+        ("Open Date", customer["account_open_date"]),
+        ("Card Type", customer["card_type"]),
+        ("Rewards Preference", customer["rewards_preference"]),
+        ("Digital Score", f"{int(customer['digital_engagement_score'])}/100"),
+        ("Last App Login", f"{int(customer['last_app_login_days'])} days ago"),
+        ("Autopay / Paperless", f"{customer['autopay_enrolled']} / {customer['paperless_enrolled']}"),
+    ]
+
+    credit_rows = [
         ("Age", f"{int(customer['age'])}"),
         ("Income", f"${customer['income']:,.0f}"),
         ("Credit Score", f"{int(customer['credit_score'])}"),
         ("Credit Limit", f"${customer['credit_limit']:,.0f}"),
         ("Current Balance", f"${customer['current_balance']:,.0f}"),
-        ("Utilization Rate", f"{customer['utilization_rate'] * 100:.1f}%"),
+        ("Utilization", f"{customer['utilization_rate'] * 100:.1f}%"),
         ("Monthly Spend", f"${customer['monthly_spend']:,.0f}"),
-        ("Transactions", f"{int(customer['transactions_count'])}"),
-        ("Tenure", f"{int(customer['customer_tenure_months'])} months"),
-        ("Late Payments 12M", f"{int(customer['late_payments_12m'])}"),
+        ("Late Payments", f"{int(customer['late_payments_12m'])}"),
     ]
 
-    return html.Table(
+    return html.Div(
         children=[
-            html.Tbody(
-                children=[
-                    html.Tr(
-                        children=[
-                            html.Td(
-                                label,
-                                style={
-                                    "fontWeight": "800",
-                                    "color": COLORS["muted"],
-                                    "padding": "10px 12px",
-                                    "borderBottom": f"1px solid {COLORS['border']}",
-                                    "width": "42%",
-                                },
-                            ),
-                            html.Td(
-                                value,
-                                style={
-                                    "fontWeight": "800",
-                                    "color": COLORS["text"],
-                                    "padding": "10px 12px",
-                                    "borderBottom": f"1px solid {COLORS['border']}",
-                                },
-                            ),
-                        ]
-                    )
-                    for label, value in rows
-                ]
-            )
+            create_profile_section("Contact & Identity", contact_rows, columns=2),
+            create_profile_section("Account Relationship", account_rows, columns=2),
+            create_profile_section("Credit Behavior", credit_rows, columns=2),
         ],
         style={
-            "width": "100%",
-            "borderCollapse": "collapse",
-            "fontSize": "14px",
+            "display": "grid",
+            "gridTemplateColumns": "1fr",
+            "gap": "12px",
         },
     )
-
-
 
 
 def build_decision_workbench_layout() -> html.Div:
@@ -946,16 +1212,16 @@ def build_decision_workbench_layout() -> html.Div:
                                 },
                             ),
                             html.H3(
-                                "Advanced decision tools",
+                                "Inspect, simulate, test, then decide",
                                 style={
-                                    "margin": "0 0 10px 0",
+                                    "margin": "0 0 6px 0",
                                     "fontSize": "22px",
                                     "fontWeight": "900",
                                     "color": COLORS["text"],
                                 },
                             ),
                             html.P(
-                                "Use the vertical menu to move between customer-level explainability, campaign simulation, and A/B test planning.",
+                                "Customer Lookup explains individual decisions, Scenario Simulator tests campaign assumptions, and A/B Test Planner designs controlled experiments before rollout.",
                                 style={
                                     "margin": "0",
                                     "fontSize": "14px",
@@ -963,141 +1229,108 @@ def build_decision_workbench_layout() -> html.Div:
                                     "lineHeight": "1.5",
                                 },
                             ),
-                            html.Div(
-                                children=[
-                                    html.Div("1. Customer Lookup", style={"fontWeight": "800", "marginBottom": "8px"}),
-                                    html.Div("2. Scenario Simulator", style={"fontWeight": "800", "marginBottom": "8px"}),
-                                    html.Div("3. A/B Test Planner", style={"fontWeight": "800"}),
-                                ],
-                                style={
-                                    "backgroundColor": "#f8fafc",
-                                    "border": f"1px solid {COLORS['border']}",
-                                    "borderRadius": "16px",
-                                    "padding": "14px",
-                                    "marginTop": "18px",
-                                    "fontSize": "14px",
-                                    "color": COLORS["text"],
-                                },
-                            ),
-                            html.Div(
-                                children=[
-                                    html.Div(
-                                        "Why this matters",
-                                        style={
-                                            "fontSize": "13px",
-                                            "fontWeight": "900",
-                                            "textTransform": "uppercase",
-                                            "letterSpacing": "1px",
-                                            "color": COLORS["blue"],
-                                            "marginBottom": "8px",
-                                        },
-                                    ),
-                                    html.P(
-                                        "This turns the project from a reporting dashboard into a decision product. Users can explore the portfolio, inspect a customer, simulate strategy, and design a controlled test.",
-                                        style={
-                                            "margin": "0",
-                                            "fontSize": "14px",
-                                            "color": COLORS["muted"],
-                                            "lineHeight": "1.5",
-                                        },
-                                    ),
-                                ],
-                                style={
-                                    "backgroundColor": "#eff6ff",
-                                    "border": "1px solid #bfdbfe",
-                                    "borderRadius": "16px",
-                                    "padding": "14px",
-                                    "marginTop": "18px",
-                                },
-                            ),
                         ],
                         style={
                             "backgroundColor": "#ffffff",
                             "border": f"1px solid {COLORS['border']}",
                             "borderRadius": "20px",
-                            "padding": "22px",
+                            "padding": "20px",
                             "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
-                            "position": "sticky",
-                            "top": "16px",
+                            "marginBottom": "16px",
                         },
                     ),
-                    html.Div(
+                    dcc.Tabs(
+                        id="workbench-tabs",
+                        value="customer-lookup",
+                        vertical=False,
                         children=[
-                            dcc.Tabs(
-                                id="workbench-tabs",
+                            dcc.Tab(
+                                label="Customer Lookup",
                                 value="customer-lookup",
-                                vertical=True,
-                                children=[
-                                    dcc.Tab(
-                                        label="Customer Lookup",
-                                        value="customer-lookup",
-                                        children=[build_customer_lookup_layout()],
-                                        selected_style={
-                                            **selected_tab_style,
-                                            "borderRadius": "12px",
-                                            "marginBottom": "8px",
-                                        },
-                                        style={
-                                            **tab_style,
-                                            "borderRadius": "12px",
-                                            "marginBottom": "8px",
-                                            "textAlign": "left",
-                                        },
-                                    ),
-                                    dcc.Tab(
-                                        label="Scenario Simulator",
-                                        value="scenario",
-                                        children=[build_scenario_simulator_layout()],
-                                        selected_style={
-                                            **selected_tab_style,
-                                            "borderRadius": "12px",
-                                            "marginBottom": "8px",
-                                        },
-                                        style={
-                                            **tab_style,
-                                            "borderRadius": "12px",
-                                            "marginBottom": "8px",
-                                            "textAlign": "left",
-                                        },
-                                    ),
-                                    dcc.Tab(
-                                        label="A/B Test Planner",
-                                        value="ab-test",
-                                        children=[build_ab_test_planner_layout()],
-                                        selected_style={
-                                            **selected_tab_style,
-                                            "borderRadius": "12px",
-                                            "marginBottom": "8px",
-                                        },
-                                        style={
-                                            **tab_style,
-                                            "borderRadius": "12px",
-                                            "marginBottom": "8px",
-                                            "textAlign": "left",
-                                        },
-                                    ),
-                                ],
-                                style={
-                                    "backgroundColor": "#ffffff",
-                                    "border": f"1px solid {COLORS['border']}",
-                                    "borderRadius": "20px",
-                                    "padding": "12px",
-                                    "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                                children=[build_customer_lookup_layout()],
+                                selected_style={
+                                    "backgroundColor": COLORS["blue"],
+                                    "color": "white",
+                                    "fontWeight": "900",
+                                    "border": "none",
+                                    "borderRadius": "12px",
+                                    "padding": "12px 16px",
+                                    "fontSize": "14px",
                                 },
-                            )
-                        ]
+                                style={
+                                    "backgroundColor": "#f8fafc",
+                                    "color": COLORS["text"],
+                                    "fontWeight": "800",
+                                    "border": f"1px solid {COLORS['border']}",
+                                    "borderRadius": "12px",
+                                    "padding": "12px 16px",
+                                    "fontSize": "14px",
+                                },
+                            ),
+                            dcc.Tab(
+                                label="Scenario Simulator",
+                                value="scenario",
+                                children=[build_scenario_simulator_layout()],
+                                selected_style={
+                                    "backgroundColor": COLORS["blue"],
+                                    "color": "white",
+                                    "fontWeight": "900",
+                                    "border": "none",
+                                    "borderRadius": "12px",
+                                    "padding": "12px 16px",
+                                    "fontSize": "14px",
+                                },
+                                style={
+                                    "backgroundColor": "#f8fafc",
+                                    "color": COLORS["text"],
+                                    "fontWeight": "800",
+                                    "border": f"1px solid {COLORS['border']}",
+                                    "borderRadius": "12px",
+                                    "padding": "12px 16px",
+                                    "fontSize": "14px",
+                                },
+                            ),
+                            dcc.Tab(
+                                label="A/B Test Planner",
+                                value="ab-test",
+                                children=[build_ab_test_planner_layout()],
+                                selected_style={
+                                    "backgroundColor": COLORS["blue"],
+                                    "color": "white",
+                                    "fontWeight": "900",
+                                    "border": "none",
+                                    "borderRadius": "12px",
+                                    "padding": "12px 16px",
+                                    "fontSize": "14px",
+                                },
+                                style={
+                                    "backgroundColor": "#f8fafc",
+                                    "color": COLORS["text"],
+                                    "fontWeight": "800",
+                                    "border": f"1px solid {COLORS['border']}",
+                                    "borderRadius": "12px",
+                                    "padding": "12px 16px",
+                                    "fontSize": "14px",
+                                },
+                            ),
+                        ],
+                        style={
+                            "backgroundColor": "#eef2ff",
+                            "border": "1px solid #dbeafe",
+                            "borderRadius": "16px",
+                            "padding": "8px",
+                            "marginBottom": "16px",
+                        },
+                        colors={
+                            "border": "transparent",
+                            "primary": "#2563eb",
+                            "background": "#eef2ff",
+                        },
                     ),
-                ],
-                style={
-                    "display": "grid",
-                    "gridTemplateColumns": "300px 1fr",
-                    "gap": "18px",
-                    "alignItems": "start",
-                },
+                ]
             ),
         ]
     )
-
 
 
 def build_scenario_simulator_layout() -> html.Div:
@@ -1512,7 +1745,7 @@ app.layout = html.Div(
                                 create_chart_card("Risk Band Distribution", "Portfolio split by estimated risk band.", risk_fig, "guardrail-risk-chart"),
                                 create_chart_card("High-Utilization Revolver Mix", "Decision mix for customers who may need extra guardrails.", high_utilization_fig, "guardrail-high-util-chart"),
                             ],
-                            style={"display": "grid", "gridTemplateColumns": "0.95fr 1.05fr", "gap": "18px"},
+                            style={"display": "grid", "gridTemplateColumns": "0.9fr 1.1fr", "gap": "18px"},
                         ),
                         html.Div(style={"height": "18px"}),
                         create_chart_card("Blocked Customers by Segment", "Where risk guardrails are triggered.", block_segment_fig, "guardrail-blocked-segment-chart"),
@@ -1630,14 +1863,81 @@ def update_filtered_charts(selected_segments, selected_decisions, selected_risks
 
 
 
+
+@app.callback(
+    Output("customer-directory-table", "data"),
+    Output("customer-directory-table", "selected_rows"),
+    Input("customer-directory-search", "value"),
+    Input("customer-directory-segment-filter", "value"),
+    Input("customer-directory-decision-filter", "value"),
+)
+def update_customer_directory(search_value, selected_segment, selected_decision):
+    directory = customer_features[
+        [
+            "customer_id",
+            "customer_name",
+            "customer_email",
+            "city",
+            "state",
+            "customer_segment",
+            "risk_band",
+            "decision_status",
+        ]
+    ].copy()
+
+    directory["location"] = directory["city"] + ", " + directory["state"]
+
+    if selected_segment:
+        directory = directory[directory["customer_segment"] == selected_segment]
+
+    if selected_decision:
+        directory = directory[directory["decision_status"] == selected_decision]
+
+    if search_value:
+        search_text = str(search_value).strip().lower()
+
+        searchable = (
+            directory["customer_id"].astype(str)
+            + " "
+            + directory["customer_name"].astype(str)
+            + " "
+            + directory["customer_email"].astype(str)
+            + " "
+            + directory["location"].astype(str)
+            + " "
+            + directory["customer_segment"].astype(str)
+            + " "
+            + directory["risk_band"].astype(str)
+            + " "
+            + directory["decision_status"].astype(str)
+        ).str.lower()
+
+        directory = directory[searchable.str.contains(search_text, na=False)]
+
+    directory = directory[
+        [
+            "customer_id",
+            "customer_name",
+            "location",
+            "customer_segment",
+            "risk_band",
+            "decision_status",
+        ]
+    ].head(500)
+
+    return directory.to_dict("records"), [0] if len(directory) > 0 else []
+
+
+
 @app.callback(
     Output("customer-lookup-output", "children"),
-    Input("customer-lookup-id", "value"),
+    Input("customer-directory-table", "selected_rows"),
+    State("customer-directory-table", "derived_virtual_data"),
 )
-def update_customer_lookup(customer_id):
-    if customer_id is None:
+def update_customer_lookup(selected_rows, table_data):
+    if not table_data:
         return html.Div(
-            "Select a customer to view the decision explanation.",
+            "No customers are available in the current directory view.",
             style={
                 "backgroundColor": "#ffffff",
                 "border": f"1px solid {COLORS['border']}",
@@ -1645,6 +1945,16 @@ def update_customer_lookup(customer_id):
                 "padding": "22px",
             },
         )
+
+    if not selected_rows:
+        selected_rows = [0]
+
+    selected_index = selected_rows[0]
+
+    if selected_index >= len(table_data):
+        selected_index = 0
+
+    customer_id = table_data[selected_index]["customer_id"]
 
     selected = customer_features[customer_features["customer_id"] == customer_id]
 
@@ -1683,7 +1993,7 @@ def update_customer_lookup(customer_id):
                                 },
                             ),
                             html.H2(
-                                f"{customer['customer_id']}",
+                                f"{customer['customer_name']}",
                                 style={
                                     "margin": "0",
                                     "fontSize": "28px",
@@ -1692,10 +2002,26 @@ def update_customer_lookup(customer_id):
                                 },
                             ),
                             html.P(
-                                f"{customer['customer_segment']} | {customer['offer_type']}",
+                                f"Customer {customer['customer_id']} | {customer['city']}, {customer['state']} | {customer['customer_segment']}",
                                 style={
                                     "margin": "8px 0 0 0",
                                     "fontSize": "14px",
+                                    "color": COLORS["muted"],
+                                },
+                            ),
+                            html.P(
+                                f"{customer['relationship_tier']} relationship | {customer['card_type']} card | {customer['preferred_channel']}",
+                                style={
+                                    "margin": "6px 0 0 0",
+                                    "fontSize": "14px",
+                                    "color": COLORS["muted"],
+                                },
+                            ),
+                            html.P(
+                                f"{customer['customer_email']} | {customer['phone_number']}",
+                                style={
+                                    "margin": "6px 0 0 0",
+                                    "fontSize": "13px",
                                     "color": COLORS["muted"],
                                 },
                             ),
@@ -1770,7 +2096,7 @@ def update_customer_lookup(customer_id):
                 ],
                 style={
                     "display": "grid",
-                    "gridTemplateColumns": "repeat(4, 1fr)",
+                    "gridTemplateColumns": "repeat(4, minmax(0, 1fr))",
                     "gap": "12px",
                     "marginBottom": "18px",
                 },
@@ -1796,6 +2122,7 @@ def update_customer_lookup(customer_id):
                             "border": f"1px solid {COLORS['border']}",
                             "borderRadius": "18px",
                             "padding": "18px",
+                            "minWidth": "0",
                         },
                     ),
                     html.Div(
@@ -1816,12 +2143,13 @@ def update_customer_lookup(customer_id):
                             "border": f"1px solid {COLORS['border']}",
                             "borderRadius": "18px",
                             "padding": "18px",
+                            "minWidth": "0",
                         },
                     ),
                 ],
                 style={
                     "display": "grid",
-                    "gridTemplateColumns": "0.9fr 1.1fr",
+                    "gridTemplateColumns": "1fr",
                     "gap": "16px",
                 },
             ),
