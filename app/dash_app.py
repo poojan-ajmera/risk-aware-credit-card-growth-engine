@@ -1277,7 +1277,7 @@ def create_workflow_guide() -> html.Details:
 def create_action_prompt_panel() -> html.Details:
     actions = [
         ("Campaign decision", "Use Campaigns & Offers to decide which campaign deserves scale, test, or constraint.", "Open Campaigns", "action-open-campaigns"),
-        ("Customer action", "Use Customer Lookup and Export Center to inspect who is included before campaign execution.", "Open Customer Tools", "action-open-customer-tools"),
+        ("Customer action", "Use Customer 360 and Export Center to inspect who is included before campaign execution.", "Open Customer Tools", "action-open-customer-tools"),
         ("Risk action", "Use Guardrails before launch to avoid risky growth and protect sensitive audiences.", "Open Guardrails", "action-open-guardrails"),
     ]
 
@@ -2030,7 +2030,7 @@ def build_customer_lookup_layout() -> html.Div:
     return html.Div(
         children=[
             create_tab_intro(
-                "Customer Lookup",
+                "Customer 360",
                 "Search the customer directory, select a customer, and review the profile, decision, risk band, recommended action, and explanation behind the engine output.",
             ),
             html.Div(
@@ -2161,17 +2161,17 @@ def build_customer_lookup_layout() -> html.Div:
                                         "border": "1px solid #2563eb",
                                     },
                                     {
-                                        "if": {"filter_query": "{decision_status} = Scale"},
+                                        "if": {"filter_query": '{decision_status} = "Scale"'},
                                         "color": "#166534",
                                         "fontWeight": "800",
                                     },
                                     {
-                                        "if": {"filter_query": "{decision_status} = Block"},
+                                        "if": {"filter_query": '{decision_status} = "Block"'},
                                         "color": "#991b1b",
                                         "fontWeight": "800",
                                     },
                                     {
-                                        "if": {"filter_query": "{decision_status} = Test"},
+                                        "if": {"filter_query": '{decision_status} = "Test"'},
                                         "color": "#1d4ed8",
                                         "fontWeight": "800",
                                     },
@@ -2460,6 +2460,359 @@ def create_customer_profile_table(customer: pd.Series) -> html.Div:
     )
 
 
+
+def create_zero_state_card(title: str, message: str, action: str = "") -> html.Div:
+    return html.Div(
+        children=[
+            html.H4(title, style={"margin": "0 0 8px 0", "color": "#991b1b", "fontSize": "16px"}),
+            html.P(message, style={"margin": "0", "color": "#7f1d1d", "lineHeight": "1.5"}),
+            html.P(action, style={"margin": "8px 0 0 0", "color": "#7f1d1d", "lineHeight": "1.5"}) if action else html.Div(),
+        ],
+        style={
+            "backgroundColor": "#fef2f2",
+            "border": "1px solid #fecaca",
+            "borderLeft": "5px solid #dc2626",
+            "borderRadius": "14px",
+            "padding": "14px",
+            "margin": "12px 0",
+        },
+    )
+
+
+def build_customer_explorer_dataframe(
+    search_text: str | None,
+    segment: str | None,
+    decision: str | None,
+    risk_band: str | None,
+    state: str | None,
+    card_type: str | None,
+    campaign_id: str | None,
+    audience_type: str | None,
+) -> pd.DataFrame:
+    if campaign_id and campaign_id != "None":
+        df = get_campaign_audience_df(campaign_id, segment or "All Segments", audience_type or "Eligible").copy()
+    else:
+        df = customer_features.copy()
+
+        if segment and segment != "All Segments":
+            df = df[df["customer_segment"] == segment].copy()
+
+    if decision and decision != "All Decisions":
+        df = df[df["decision_status"] == decision].copy()
+
+    if risk_band and risk_band != "All Risk Bands":
+        df = df[df["risk_band"] == risk_band].copy()
+
+    if state and state != "All States" and "state" in df.columns:
+        df = df[df["state"] == state].copy()
+
+    if card_type and card_type != "All Card Types" and "card_type" in df.columns:
+        df = df[df["card_type"] == card_type].copy()
+
+    if search_text:
+        search_value = str(search_text).strip().lower()
+
+        searchable_columns = [
+            column for column in [
+                "customer_id",
+                "customer_name",
+                "customer_email",
+                "city",
+                "state",
+                "customer_segment",
+                "decision_status",
+                "risk_band",
+                "recommended_action",
+                "card_type",
+                "rewards_preference",
+            ]
+            if column in df.columns
+        ]
+
+        if searchable_columns:
+            search_mask = pd.Series(False, index=df.index)
+
+            for column in searchable_columns:
+                search_mask = search_mask | df[column].astype(str).str.lower().str.contains(search_value, na=False)
+
+            df = df[search_mask].copy()
+
+    return df
+
+
+def format_customer_explorer_preview(df: pd.DataFrame, limit: int = 500) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame()
+
+    preview = df.copy()
+
+    rename_map = {
+        "customer_id": "Customer ID",
+        "customer_name": "Name",
+        "customer_email": "Email",
+        "city": "City",
+        "state": "State",
+        "customer_segment": "Segment",
+        "risk_band": "Risk Band",
+        "decision_status": "Decision",
+        "recommended_action": "Recommended Action",
+        "offer_type": "Treatment Type",
+        "card_type": "Card Type",
+        "rewards_preference": "Rewards",
+        "credit_score": "Credit Score",
+        "utilization_rate": "Utilization",
+        "default_probability": "Default Probability",
+        "monthly_spend": "Monthly Spend",
+        "risk_adjusted_profit": "Risk-Adjusted Profit",
+        "expected_roi": "Expected ROI",
+        "preferred_channel": "Preferred Channel",
+    }
+
+    preview = preview.rename(columns=rename_map)
+
+    for column in ["Utilization", "Default Probability"]:
+        if column in preview.columns:
+            preview[column] = preview[column].apply(lambda value: f"{value * 100:.1f}%")
+
+    for column in ["Monthly Spend", "Risk-Adjusted Profit"]:
+        if column in preview.columns:
+            preview[column] = preview[column].apply(lambda value: f"${value:,.0f}")
+
+    if "Expected ROI" in preview.columns:
+        preview["Expected ROI"] = preview["Expected ROI"].apply(lambda value: f"{value:.2f}x")
+
+    preview_columns = [
+        "Customer ID",
+        "Name",
+        "Email",
+        "City",
+        "State",
+        "Segment",
+        "Risk Band",
+        "Decision",
+        "Recommended Action",
+        "Treatment Type",
+        "Card Type",
+        "Rewards",
+        "Credit Score",
+        "Utilization",
+        "Default Probability",
+        "Monthly Spend",
+        "Risk-Adjusted Profit",
+        "Expected ROI",
+        "Preferred Channel",
+    ]
+
+    preview_columns = [column for column in preview_columns if column in preview.columns]
+
+    return preview[preview_columns].head(limit)
+
+
+def create_customer_explorer_layout() -> html.Div:
+    segment_options = [{"label": "All Segments", "value": "All Segments"}] + [
+        {"label": segment, "value": segment}
+        for segment in sorted(customer_features["customer_segment"].dropna().unique())
+    ]
+
+    decision_options = [{"label": "All Decisions", "value": "All Decisions"}] + [
+        {"label": decision, "value": decision}
+        for decision in sorted(customer_features["decision_status"].dropna().unique())
+    ]
+
+    risk_options = [{"label": "All Risk Bands", "value": "All Risk Bands"}] + [
+        {"label": risk, "value": risk}
+        for risk in sorted(customer_features["risk_band"].dropna().unique())
+    ]
+
+    state_options = [{"label": "All States", "value": "All States"}] + [
+        {"label": state, "value": state}
+        for state in sorted(customer_features["state"].dropna().unique())
+    ]
+
+    card_options = [{"label": "All Card Types", "value": "All Card Types"}] + [
+        {"label": card_type, "value": card_type}
+        for card_type in sorted(customer_features["card_type"].dropna().unique())
+    ]
+
+    campaign_options = [{"label": "No campaign filter", "value": "None"}]
+
+    if not campaign_recommendations.empty:
+        campaign_options += [
+            {
+                "label": f"{int(row['dashboard_recommendation_rank'])}. {row['campaign_name']} ({row['recommended_rollout_decision']})",
+                "value": row["campaign_id"],
+            }
+            for _, row in campaign_recommendations.head(25).iterrows()
+        ]
+
+    return html.Div(
+        children=[
+            create_tab_intro(
+                "Audience Explorer",
+                "Use this section as the operational audience database. Filter customers by segment, risk, decision, state, card type, or campaign audience, then export the selected list for review or campaign setup.",
+            ),
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Label(help_label("Search", "Search by customer ID, name, email, city, state, segment, decision, or treatment type.")),
+                            dcc.Input(
+                                id="customer-explorer-search",
+                                type="text",
+                                placeholder="Search customer ID, name, email, city...",
+                                debounce=True,
+                                style={
+                                    "width": "100%",
+                                    "padding": "10px",
+                                    "border": f"1px solid {COLORS['border']}",
+                                    "borderRadius": "10px",
+                                },
+                            ),
+                        ],
+                    ),
+                    html.Div(
+                        children=[
+                            html.Label(help_label("Campaign Filter", "Optional. Select a campaign to show only customers eligible for that campaign audience.")),
+                            dcc.Dropdown(
+                                id="customer-explorer-campaign",
+                                options=campaign_options,
+                                value="None",
+                                clearable=False,
+                            ),
+                        ],
+                    ),
+                    html.Div(
+                        children=[
+                            html.Label(help_label("Campaign Audience", "When a campaign is selected, choose eligible, scale, test, or blocked customers.")),
+                            dcc.Dropdown(
+                                id="customer-explorer-audience-type",
+                                options=[
+                                    {"label": "Eligible customers", "value": "Eligible"},
+                                    {"label": "Scale customers", "value": "Scale"},
+                                    {"label": "Test customers", "value": "Test"},
+                                    {"label": "Blocked customers", "value": "Blocked"},
+                                ],
+                                value="Eligible",
+                                clearable=False,
+                            ),
+                        ],
+                    ),
+                    html.Div(
+                        children=[
+                            html.Label("Segment", style={"fontWeight": "800"}),
+                            dcc.Dropdown(id="customer-explorer-segment", options=segment_options, value="All Segments", clearable=False),
+                        ],
+                    ),
+                    html.Div(
+                        children=[
+                            html.Label("Decision", style={"fontWeight": "800"}),
+                            dcc.Dropdown(id="customer-explorer-decision", options=decision_options, value="All Decisions", clearable=False),
+                        ],
+                    ),
+                    html.Div(
+                        children=[
+                            html.Label("Risk Band", style={"fontWeight": "800"}),
+                            dcc.Dropdown(id="customer-explorer-risk", options=risk_options, value="All Risk Bands", clearable=False),
+                        ],
+                    ),
+                    html.Div(
+                        children=[
+                            html.Label("State", style={"fontWeight": "800"}),
+                            dcc.Dropdown(id="customer-explorer-state", options=state_options, value="All States", clearable=False),
+                        ],
+                    ),
+                    html.Div(
+                        children=[
+                            html.Label("Card Type", style={"fontWeight": "800"}),
+                            dcc.Dropdown(id="customer-explorer-card-type", options=card_options, value="All Card Types", clearable=False),
+                        ],
+                    ),
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "repeat(4, 1fr)",
+                    "gap": "14px",
+                    "backgroundColor": COLORS["card"],
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "18px",
+                    "padding": "18px",
+                    "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                    "marginBottom": "18px",
+                },
+            ),
+            html.Div(id="customer-explorer-summary"),
+            html.Div(
+                children=[
+                    html.Button(
+                        "Download CSV",
+                        id="download-customer-explorer-csv-button",
+                        n_clicks=0,
+                        style={
+                            "backgroundColor": COLORS["blue"],
+                            "color": "white",
+                            "border": "none",
+                            "borderRadius": "10px",
+                            "padding": "10px 14px",
+                            "fontWeight": "900",
+                            "cursor": "pointer",
+                            "width": "150px",
+                        },
+                    ),
+                    html.Button(
+                        "Download Excel",
+                        id="download-customer-explorer-excel-button",
+                        n_clicks=0,
+                        style={
+                            "backgroundColor": "#16a34a",
+                            "color": "white",
+                            "border": "none",
+                            "borderRadius": "10px",
+                            "padding": "10px 14px",
+                            "fontWeight": "900",
+                            "cursor": "pointer",
+                            "width": "160px",
+                        },
+                    ),
+                    dcc.Download(id="download-customer-explorer-csv"),
+                    dcc.Download(id="download-customer-explorer-excel"),
+                ],
+                style={"display": "flex", "gap": "10px", "marginBottom": "14px", "flexWrap": "wrap"},
+            ),
+            dash_table.DataTable(
+                id="customer-explorer-table",
+                columns=[],
+                data=[],
+                page_size=15,
+                sort_action="native",
+                filter_action="native",
+                style_table={"overflowX": "auto"},
+                style_header={
+                    "backgroundColor": "#f8fafc",
+                    "fontWeight": "900",
+                    "color": COLORS["muted"],
+                    "border": f"1px solid {COLORS['border']}",
+                },
+                style_cell={
+                    "padding": "10px",
+                    "fontSize": "13px",
+                    "fontFamily": "Arial",
+                    "border": f"1px solid {COLORS['border']}",
+                    "whiteSpace": "normal",
+                    "height": "auto",
+                    "textAlign": "left",
+                    "minWidth": "90px",
+                },
+                style_data_conditional=[
+                    {"if": {"filter_query": '{Decision} = "Scale"'}, "backgroundColor": "#f0fdf4"},
+                    {"if": {"filter_query": '{Decision} = "Test"'}, "backgroundColor": "#eff6ff"},
+                    {"if": {"filter_query": '{Decision} = "Block"'}, "backgroundColor": "#fef2f2"},
+                    {"if": {"filter_query": '{Risk Band} = "Very High Risk"'}, "backgroundColor": "#fff1f2"},
+                ],
+            ),
+        ],
+    )
+
+
 def build_decision_workbench_layout() -> html.Div:
     return html.Div(
         children=[
@@ -2492,7 +2845,7 @@ def build_decision_workbench_layout() -> html.Div:
                                 },
                             ),
                             html.P(
-                                "Customer Lookup explains individual decisions, Scenario Simulator tests campaign assumptions, and A/B Test Planner designs controlled experiments before rollout.",
+                                "Customer 360 explains individual decisions, Scenario Simulator tests campaign assumptions, A/B Test Planner designs experiments, and Audience Explorer exports customer lists before rollout.",
                                 style={
                                     "margin": "0",
                                     "fontSize": "14px",
@@ -2516,7 +2869,7 @@ def build_decision_workbench_layout() -> html.Div:
                         vertical=False,
                         children=[
                             dcc.Tab(
-                                label="Customer Lookup",
+                                label="Customer 360",
                                 value="customer-lookup",
                                 children=[build_customer_lookup_layout()],
                                 selected_style={
@@ -2584,7 +2937,17 @@ def build_decision_workbench_layout() -> html.Div:
                                     "fontSize": "14px",
                                 },
                             ),
-                        ],
+                        
+                                dcc.Tab(
+                                    label="Audience Explorer",
+                                    value="customer-explorer",
+                                    style=tab_style,
+                                    selected_style=selected_tab_style,
+                                    children=[
+                                        create_customer_explorer_layout()
+                                    ],
+                                ),
+],
                         style={
                             "backgroundColor": "#eef2ff",
                             "border": "1px solid #dbeafe",
@@ -3188,6 +3551,15 @@ app.layout = html.Div(
         create_color_legend(),
 
         create_action_prompt_panel(),
+
+        html.Div(
+            children=[
+                dcc.Graph(id="offer-action-mix-chart"),
+                dcc.Graph(id="offer-type-chart"),
+            ],
+            id="hidden-callback-placeholders",
+            style={"display": "none"},
+        ),
 
         dcc.Tabs(
             id="main-tabs",
@@ -4580,15 +4952,15 @@ def update_ab_test_planner(campaign_id: str, segment: str, baseline_rate_percent
                         },
                         style_data_conditional=[
                             {
-                                "if": {"filter_query": "{Campaign Action} = Scale"},
+                                "if": {"filter_query": '{Campaign Action} = "Scale"'},
                                 "backgroundColor": "#f0fdf4",
                             },
                             {
-                                "if": {"filter_query": "{Campaign Action} = Test"},
+                                "if": {"filter_query": '{Campaign Action} = "Test"'},
                                 "backgroundColor": "#eff6ff",
                             },
                             {
-                                "if": {"filter_query": "{Campaign Action} = Blocked"},
+                                "if": {"filter_query": '{Campaign Action} = "Blocked"'},
                                 "backgroundColor": "#fef2f2",
                             },
                         ],
@@ -4681,6 +5053,170 @@ def download_ab_customer_list(n_clicks: int, campaign_id: str, segment: str, aud
     return dcc.send_data_frame(audience_df.to_csv, filename, index=False)
 
 
+
+@app.callback(
+    Output("customer-explorer-summary", "children"),
+    Output("customer-explorer-table", "data"),
+    Output("customer-explorer-table", "columns"),
+    Input("customer-explorer-search", "value"),
+    Input("customer-explorer-segment", "value"),
+    Input("customer-explorer-decision", "value"),
+    Input("customer-explorer-risk", "value"),
+    Input("customer-explorer-state", "value"),
+    Input("customer-explorer-card-type", "value"),
+    Input("customer-explorer-campaign", "value"),
+    Input("customer-explorer-audience-type", "value"),
+)
+def update_customer_explorer(
+    search_text,
+    segment,
+    decision,
+    risk_band,
+    state,
+    card_type,
+    campaign_id,
+    audience_type,
+):
+    explorer_df = build_customer_explorer_dataframe(
+        search_text,
+        segment,
+        decision,
+        risk_band,
+        state,
+        card_type,
+        campaign_id,
+        audience_type,
+    )
+
+    if explorer_df.empty:
+        summary = create_zero_state_card(
+            "No customers match these filters",
+            "The selected filters, campaign, or audience type returned zero customers.",
+            "Try widening the segment, selecting All Decisions, clearing search, or choosing a different campaign audience.",
+        )
+        return summary, [], []
+
+    preview_df = format_customer_explorer_preview(explorer_df, limit=500)
+
+    decision_counts = explorer_df["decision_status"].value_counts().to_dict() if "decision_status" in explorer_df.columns else {}
+    scale_count = int(decision_counts.get("Scale", 0))
+    test_count = int(decision_counts.get("Test", 0))
+    block_count = int(decision_counts.get("Block", 0))
+    do_not_launch_count = int(decision_counts.get("Do Not Launch", 0))
+
+    summary = html.Div(
+        children=[
+            create_kpi_card("Matched Customers", f"{len(explorer_df):,}", "Customers matching current filters", "#2563eb"),
+            create_kpi_card("Preview Rows", f"{len(preview_df):,}", "Rows shown in table preview", "#0ea5e9"),
+            create_kpi_card("Scale / Test / Block", f"{scale_count:,} / {test_count:,} / {block_count:,}", "Decision split", "#7c3aed"),
+            create_kpi_card("Do Not Launch", f"{do_not_launch_count:,}", "Customers not recommended for launch", "#9ca3af"),
+        ],
+        style={
+            "display": "grid",
+            "gridTemplateColumns": "repeat(4, 1fr)",
+            "gap": "14px",
+            "marginBottom": "14px",
+        },
+    )
+
+    columns = [{"name": column, "id": column} for column in preview_df.columns]
+
+    return summary, preview_df.to_dict("records"), columns
+
+
+@app.callback(
+    Output("download-customer-explorer-csv", "data"),
+    Input("download-customer-explorer-csv-button", "n_clicks"),
+    State("customer-explorer-search", "value"),
+    State("customer-explorer-segment", "value"),
+    State("customer-explorer-decision", "value"),
+    State("customer-explorer-risk", "value"),
+    State("customer-explorer-state", "value"),
+    State("customer-explorer-card-type", "value"),
+    State("customer-explorer-campaign", "value"),
+    State("customer-explorer-audience-type", "value"),
+    prevent_initial_call=True,
+)
+def download_customer_explorer_csv(
+    n_clicks,
+    search_text,
+    segment,
+    decision,
+    risk_band,
+    state,
+    card_type,
+    campaign_id,
+    audience_type,
+):
+    if not n_clicks:
+        raise PreventUpdate
+
+    explorer_df = build_customer_explorer_dataframe(
+        search_text,
+        segment,
+        decision,
+        risk_band,
+        state,
+        card_type,
+        campaign_id,
+        audience_type,
+    )
+
+    if explorer_df.empty:
+        raise PreventUpdate
+
+    filename = "customer_explorer_export.csv"
+
+    return dcc.send_data_frame(explorer_df.to_csv, filename, index=False)
+
+
+@app.callback(
+    Output("download-customer-explorer-excel", "data"),
+    Input("download-customer-explorer-excel-button", "n_clicks"),
+    State("customer-explorer-search", "value"),
+    State("customer-explorer-segment", "value"),
+    State("customer-explorer-decision", "value"),
+    State("customer-explorer-risk", "value"),
+    State("customer-explorer-state", "value"),
+    State("customer-explorer-card-type", "value"),
+    State("customer-explorer-campaign", "value"),
+    State("customer-explorer-audience-type", "value"),
+    prevent_initial_call=True,
+)
+def download_customer_explorer_excel(
+    n_clicks,
+    search_text,
+    segment,
+    decision,
+    risk_band,
+    state,
+    card_type,
+    campaign_id,
+    audience_type,
+):
+    if not n_clicks:
+        raise PreventUpdate
+
+    explorer_df = build_customer_explorer_dataframe(
+        search_text,
+        segment,
+        decision,
+        risk_band,
+        state,
+        card_type,
+        campaign_id,
+        audience_type,
+    )
+
+    if explorer_df.empty:
+        raise PreventUpdate
+
+    filename = "customer_explorer_export.xlsx"
+
+    return dcc.send_data_frame(explorer_df.to_excel, filename, index=False)
+
+
+
 @app.callback(
     Output("download-ab-customer-list-excel", "data"),
     Input("download-ab-customer-list-excel-button", "n_clicks"),
@@ -4745,8 +5281,11 @@ def navigate_from_dashboard_guides(
     if trigger == "guide-open-scenario":
         return "decision-workbench", "scenario-simulator"
 
-    if trigger in ["guide-open-ab", "guide-open-export"]:
+    if trigger == "guide-open-ab":
         return "decision-workbench", "ab-test-planner"
+
+    if trigger == "guide-open-export":
+        return "decision-workbench", "customer-explorer"
 
     if trigger == "action-open-customer-tools":
         return "decision-workbench", "customer-lookup"
