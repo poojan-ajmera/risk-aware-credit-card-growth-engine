@@ -2138,6 +2138,153 @@ def create_compact_governance_panel() -> html.Details:
 
 
 
+
+def create_workflow_cta_panel(title: str, description: str, buttons: list[dict]) -> html.Div:
+    return html.Div(
+        children=[
+            html.Div(
+                children=[
+                    html.H3(
+                        title,
+                        style={"margin": "0 0 6px 0", "fontSize": "20px", "fontWeight": "900"},
+                    ),
+                    html.P(
+                        description,
+                        style={"margin": "0", "color": COLORS["muted"], "lineHeight": "1.5"},
+                    ),
+                ],
+                style={"marginBottom": "14px"},
+            ),
+            html.Div(
+                children=[
+                    html.Button(
+                        button["label"],
+                        id=button["id"],
+                        n_clicks=0,
+                        title=button.get("title", button["label"]),
+                        style={
+                            "backgroundColor": button.get("color", COLORS["blue"]),
+                            "color": "white",
+                            "border": "none",
+                            "borderRadius": "12px",
+                            "padding": "10px 14px",
+                            "fontWeight": "900",
+                            "cursor": "pointer",
+                            "minWidth": "150px",
+                            "boxShadow": "0 6px 14px rgba(37, 99, 235, 0.18)",
+                        },
+                    )
+                    for button in buttons
+                ],
+                style={"display": "flex", "gap": "10px", "flexWrap": "wrap"},
+            ),
+        ],
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "18px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+            "marginTop": "18px",
+            "marginBottom": "18px",
+        },
+    )
+
+
+def create_campaigns_action_panel() -> html.Div:
+    return create_workflow_cta_panel(
+        "Recommended next actions",
+        "After selecting a campaign, move into simulation, experiment design, customer export, or final guardrail review.",
+        [
+            {
+                "label": "Open Scenario",
+                "id": "cta-open-scenario",
+                "title": "Go to the Scenario Simulator to test cost, lift, risk threshold, ROI, and profit impact.",
+                "color": "#2563eb",
+            },
+            {
+                "label": "Open A/B Planner",
+                "id": "cta-open-ab",
+                "title": "Go to the A/B Test Planner to size control and treatment groups before rollout.",
+                "color": "#7c3aed",
+            },
+            {
+                "label": "Open Audience Export",
+                "id": "cta-open-audience",
+                "title": "Go to Audience Explorer to filter and download the customer list.",
+                "color": "#16a34a",
+            },
+            {
+                "label": "Review Guardrails",
+                "id": "cta-open-guardrails",
+                "title": "Go to Guardrails for risk and responsible-use review before launch.",
+                "color": "#dc2626",
+            },
+        ],
+    )
+
+
+def create_playbook_action_panel() -> html.Div:
+    return create_workflow_cta_panel(
+        "Use the playbook to take action",
+        "The playbook tells the business user what to do next. Use these shortcuts to move from strategy into execution.",
+        [
+            {
+                "label": "Choose Campaign",
+                "id": "cta-playbook-campaigns",
+                "title": "Open Campaigns & Offers to choose a recommended campaign from the library.",
+                "color": "#2563eb",
+            },
+            {
+                "label": "Simulate Impact",
+                "id": "cta-playbook-scenario",
+                "title": "Open Scenario Simulator to test campaign assumptions.",
+                "color": "#f97316",
+            },
+            {
+                "label": "Export Audience",
+                "id": "cta-playbook-audience",
+                "title": "Open Audience Explorer to export eligible, scale, test, or blocked customers.",
+                "color": "#16a34a",
+            },
+            {
+                "label": "Final Risk Review",
+                "id": "cta-playbook-guardrails",
+                "title": "Open Guardrails as the final review before launch.",
+                "color": "#dc2626",
+            },
+        ],
+    )
+
+
+def create_guardrails_action_panel() -> html.Div:
+    return create_workflow_cta_panel(
+        "Guardrail follow-up actions",
+        "Use these shortcuts when a campaign needs review, export, or additional testing before rollout.",
+        [
+            {
+                "label": "View Risk Audience",
+                "id": "cta-guardrails-audience",
+                "title": "Open Audience Explorer to inspect blocked, high-risk, or constrained customer groups.",
+                "color": "#16a34a",
+            },
+            {
+                "label": "Back to Playbook",
+                "id": "cta-guardrails-playbook",
+                "title": "Return to Strategy Playbook to review segment-level recommendations.",
+                "color": "#2563eb",
+            },
+            {
+                "label": "Test Campaign",
+                "id": "cta-guardrails-ab",
+                "title": "Open A/B Test Planner to design a controlled experiment before rollout.",
+                "color": "#7c3aed",
+            },
+        ],
+    )
+
+
+
 def create_filter_panel() -> html.Div:
     segment_options = [
         {"label": segment, "value": segment}
@@ -3957,6 +4104,7 @@ app.layout = html.Div(
                             "Campaign Recommendation Engine",
                             "This page ranks campaign opportunities from a reusable campaign library. It shows which campaigns are viable for the current portfolio, where to scale, where to test, and where risk should constrain rollout.",
                         ),
+                        create_campaigns_action_panel(),
                         html.Div(
                             children=[
                                 create_kpi_card(
@@ -4094,6 +4242,7 @@ app.layout = html.Div(
                             "This page translates the analytics into a practical operating playbook. It shows what each customer segment should receive, which campaigns fit, where to scale, where to test, where to constrain, and where guardrails should stop launch.",
                         ),
                         create_strategy_cta_panel(),
+                        create_playbook_action_panel(),
                         create_strategy_flow_diagram(),
                         create_strategy_risk_return_section(),
                         create_strategy_playbook_table(),
@@ -4124,6 +4273,7 @@ app.layout = html.Div(
                             "This tab checks whether the engine is protecting customers who may carry higher credit risk. The goal is to separate profitable growth from risky growth and prevent aggressive offers from going to the wrong groups.",
                         ),
                         create_compact_governance_panel(),
+                        create_guardrails_action_panel(),
                         html.Div(
                             children=[
                                 create_kpi_card("Total Blocked Customers", f"{total_blocked:,}", "Blocked from growth campaigns", "#dc2626"),
@@ -4196,6 +4346,401 @@ def apply_view_label_to_figure(fig, view_label: str):
     )
     return fig
 
+
+
+
+def apply_global_filters(selected_segments, selected_decisions, selected_risks, selected_actions) -> pd.DataFrame:
+    filtered = customer_features.copy()
+
+    if selected_segments:
+        filtered = filtered[filtered["customer_segment"].isin(selected_segments)]
+
+    if selected_decisions:
+        filtered = filtered[filtered["decision_status"].isin(selected_decisions)]
+
+    if selected_risks:
+        filtered = filtered[filtered["risk_band"].isin(selected_risks)]
+
+    if selected_actions:
+        filtered = filtered[filtered["recommended_action"].isin(selected_actions)]
+
+    return filtered
+
+
+
+
+def build_decision_share_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Decision Status Share")
+
+    counts = df["decision_status"].value_counts().reset_index()
+    counts.columns = ["decision_status", "customer_count"]
+
+    fig = px.pie(
+        counts,
+        names="decision_status",
+        values="customer_count",
+        hole=0.45,
+        title="Decision Status Share",
+        color="decision_status",
+        color_discrete_map=DECISION_COLOR_MAP,
+    )
+    fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(family="Arial", size=13, color="#111827"),
+        margin=dict(l=30, r=30, t=60, b=30),
+        legend_title_text="Decision",
+    )
+    return fig
+
+
+def build_decision_count_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Decision Status Count")
+
+    counts = df["decision_status"].value_counts().reset_index()
+    counts.columns = ["decision_status", "customer_count"]
+
+    fig = px.bar(
+        counts,
+        x="decision_status",
+        y="customer_count",
+        text="customer_count",
+        title="Decision Status Count",
+        color="decision_status",
+        color_discrete_map=DECISION_COLOR_MAP,
+    )
+    fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+    fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(family="Arial", size=13, color="#111827"),
+        margin=dict(l=40, r=30, t=60, b=50),
+        showlegend=False,
+        xaxis_title="Decision",
+        yaxis_title="Customers",
+    )
+    return fig
+
+
+def build_segment_size_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Segment Size")
+
+    counts = df["customer_segment"].value_counts().reset_index()
+    counts.columns = ["customer_segment", "customer_count"]
+
+    fig = px.bar(
+        counts.sort_values("customer_count", ascending=True),
+        x="customer_count",
+        y="customer_segment",
+        orientation="h",
+        text="customer_count",
+        title="Segment Size",
+    )
+    fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#2563eb")
+    fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(family="Arial", size=13, color="#111827"),
+        margin=dict(l=160, r=40, t=60, b=40),
+        xaxis_title="Customers",
+        yaxis_title="Segment",
+    )
+    return fig
+
+
+def build_segment_eligibility_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Eligibility Rate")
+
+    summary = (
+        df.assign(eligible=df["decision_status"].isin(["Scale", "Test"]).astype(int))
+        .groupby("customer_segment", as_index=False)
+        .agg(eligible_rate=("eligible", "mean"), customer_count=("customer_id", "count"))
+    )
+    summary["eligible_rate_pct"] = summary["eligible_rate"] * 100
+
+    fig = px.bar(
+        summary.sort_values("eligible_rate_pct", ascending=True),
+        x="eligible_rate_pct",
+        y="customer_segment",
+        orientation="h",
+        text="eligible_rate_pct",
+        title="Eligibility Rate",
+    )
+    fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside", marker_color="#7c3aed")
+    fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(family="Arial", size=13, color="#111827"),
+        margin=dict(l=160, r=40, t=60, b=40),
+        xaxis_title="Eligible rate",
+        yaxis_title="Segment",
+    )
+    return fig
+
+
+def build_segment_decision_mix_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Segment Decision Mix")
+
+    mix = (
+        df.groupby(["customer_segment", "decision_status"])
+        .size()
+        .reset_index(name="customer_count")
+    )
+
+    fig = px.bar(
+        mix,
+        x="customer_segment",
+        y="customer_count",
+        color="decision_status",
+        title="Segment Decision Mix",
+        color_discrete_map=DECISION_COLOR_MAP,
+    )
+    fig.update_layout(
+        barmode="stack",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(family="Arial", size=13, color="#111827"),
+        margin=dict(l=40, r=30, t=60, b=100),
+        xaxis_title="Segment",
+        yaxis_title="Customers",
+        legend_title_text="Decision",
+    )
+    return fig
+
+
+def build_action_mix_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Recommended Action Mix")
+
+    counts = df["recommended_action"].value_counts().reset_index()
+    counts.columns = ["recommended_action", "customer_count"]
+
+    fig = px.pie(
+        counts,
+        names="recommended_action",
+        values="customer_count",
+        hole=0.45,
+        title="Recommended Action Mix",
+    )
+    fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(family="Arial", size=13, color="#111827"),
+        margin=dict(l=30, r=30, t=60, b=30),
+        legend_title_text="Action",
+    )
+    return fig
+
+
+def build_offer_type_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Offer Type Distribution")
+
+    counts = df["offer_type"].value_counts().reset_index()
+    counts.columns = ["offer_type", "customer_count"]
+
+    fig = px.bar(
+        counts.sort_values("customer_count", ascending=True),
+        x="customer_count",
+        y="offer_type",
+        orientation="h",
+        text="customer_count",
+        title="Offer Type Distribution",
+    )
+    fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#7c3aed")
+    fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(family="Arial", size=13, color="#111827"),
+        margin=dict(l=170, r=40, t=60, b=40),
+        xaxis_title="Customers",
+        yaxis_title="Offer Type",
+    )
+    return fig
+
+
+def build_risk_band_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Risk Band Distribution")
+
+    counts = df["risk_band"].value_counts().reset_index()
+    counts.columns = ["risk_band", "customer_count"]
+
+    fig = px.pie(
+        counts,
+        names="risk_band",
+        values="customer_count",
+        hole=0.45,
+        title="Risk Band Distribution",
+        color="risk_band",
+        color_discrete_map=RISK_COLOR_MAP,
+    )
+    fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(family="Arial", size=13, color="#111827"),
+        margin=dict(l=30, r=30, t=60, b=30),
+        legend_title_text="Risk Band",
+    )
+    return fig
+
+
+def build_high_util_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("High-Utilization Revolver Mix")
+
+    subset = df[df["customer_segment"] == "High-Utilization Revolver"]
+
+    if subset.empty:
+        return empty_figure("High-Utilization Revolver Mix", "No high-utilization revolvers match the selected filters")
+
+    counts = subset["decision_status"].value_counts().reset_index()
+    counts.columns = ["decision_status", "customer_count"]
+
+    fig = px.bar(
+        counts,
+        x="decision_status",
+        y="customer_count",
+        text="customer_count",
+        title="High-Utilization Revolver Mix",
+        color="decision_status",
+        color_discrete_map=DECISION_COLOR_MAP,
+    )
+    fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+    fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(family="Arial", size=13, color="#111827"),
+        margin=dict(l=40, r=30, t=60, b=50),
+        showlegend=False,
+        xaxis_title="Decision",
+        yaxis_title="Customers",
+    )
+    return fig
+
+
+def build_blocked_segment_fig(df: pd.DataFrame):
+    if df.empty:
+        return empty_figure("Blocked Customers by Segment")
+
+    blocked = df[df["decision_status"] == "Block"]
+
+    if blocked.empty:
+        return empty_figure("Blocked Customers by Segment", "No blocked customers match the selected filters")
+
+    counts = blocked["customer_segment"].value_counts().reset_index()
+    counts.columns = ["customer_segment", "customer_count"]
+
+    fig = px.bar(
+        counts.sort_values("customer_count", ascending=True),
+        x="customer_count",
+        y="customer_segment",
+        orientation="h",
+        text="customer_count",
+        title="Blocked Customers by Segment",
+    )
+    fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#dc2626")
+    fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(family="Arial", size=13, color="#111827"),
+        margin=dict(l=160, r=40, t=60, b=40),
+        xaxis_title="Blocked customers",
+        yaxis_title="Segment",
+    )
+    return fig
+
+
+
+
+
+
+
+# ------------------------------------------------------------------
+# Stability compatibility helpers.
+# These keep older callback names working after dashboard refactors.
+# ------------------------------------------------------------------
+
+def empty_figure(title: str = "No data available", message: str = "No matching records for the selected filters."):
+    try:
+        return create_empty_figure(message)
+    except NameError:
+        fig = go.Figure()
+        fig.add_annotation(
+            text=message,
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=14, color="#6b7280"),
+            xref="paper",
+            yref="paper",
+        )
+        fig.update_layout(
+            title=title,
+            paper_bgcolor="white",
+            plot_bgcolor="white",
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            margin=dict(l=40, r=40, t=60, b=40),
+        )
+        return fig
+
+
+def build_decision_bar_fig(df: pd.DataFrame):
+    return build_decision_count_fig(df)
+
+
+def build_decision_counts_fig(df: pd.DataFrame):
+    return build_decision_count_fig(df)
+
+
+def build_segment_stack_fig(df: pd.DataFrame):
+    return build_segment_decision_mix_fig(df)
+
+
+def build_segment_mix_fig(df: pd.DataFrame):
+    return build_segment_decision_mix_fig(df)
+
+
+def build_eligible_fig(df: pd.DataFrame):
+    return build_segment_eligibility_fig(df)
+
+
+def build_eligibility_fig(df: pd.DataFrame):
+    return build_segment_eligibility_fig(df)
+
+
+def build_guardrail_risk_fig(df: pd.DataFrame):
+    return build_risk_band_fig(df)
+
+
+def build_guardrail_high_util_fig(df: pd.DataFrame):
+    return build_high_util_fig(df)
+
+
+def build_high_utilization_fig(df: pd.DataFrame):
+    return build_high_util_fig(df)
+
+
+def build_high_utilization_revolver_fig(df: pd.DataFrame):
+    return build_high_util_fig(df)
+
+
+def build_block_segment_fig(df: pd.DataFrame):
+    return build_blocked_segment_fig(df)
+
+
+def build_blocked_customers_fig(df: pd.DataFrame):
+    return build_blocked_segment_fig(df)
+
+
+def build_guardrail_blocked_segment_fig(df: pd.DataFrame):
+    return build_blocked_segment_fig(df)
 
 
 @app.callback(
@@ -5565,6 +6110,7 @@ def download_ab_customer_list_excel(n_clicks: int, campaign_id: str, segment: st
 
 
 
+
 @app.callback(
     Output("main-tabs", "value"),
     Output("workbench-tabs", "value"),
@@ -5577,375 +6123,79 @@ def download_ab_customer_list_excel(n_clicks: int, campaign_id: str, segment: st
     Input("action-open-campaigns", "n_clicks"),
     Input("action-open-customer-tools", "n_clicks"),
     Input("action-open-guardrails", "n_clicks"),
+    Input("cta-open-scenario", "n_clicks"),
+    Input("cta-open-ab", "n_clicks"),
+    Input("cta-open-audience", "n_clicks"),
+    Input("cta-open-guardrails", "n_clicks"),
+    Input("cta-playbook-campaigns", "n_clicks"),
+    Input("cta-playbook-scenario", "n_clicks"),
+    Input("cta-playbook-audience", "n_clicks"),
+    Input("cta-playbook-guardrails", "n_clicks"),
+    Input("cta-guardrails-audience", "n_clicks"),
+    Input("cta-guardrails-playbook", "n_clicks"),
+    Input("cta-guardrails-ab", "n_clicks"),
     prevent_initial_call=True,
 )
 def navigate_from_dashboard_guides(
-    guide_overview,
-    guide_campaigns,
-    guide_scenario,
-    guide_ab,
-    guide_export,
-    guide_guardrails,
-    action_campaigns,
-    action_customer_tools,
-    action_guardrails,
+    guide_open_overview,
+    guide_open_campaigns,
+    guide_open_scenario,
+    guide_open_ab,
+    guide_open_export,
+    guide_open_guardrails,
+    action_open_campaigns,
+    action_open_customer_tools,
+    action_open_guardrails,
+    cta_open_scenario,
+    cta_open_ab,
+    cta_open_audience,
+    cta_open_guardrails,
+    cta_playbook_campaigns,
+    cta_playbook_scenario,
+    cta_playbook_audience,
+    cta_playbook_guardrails,
+    cta_guardrails_audience,
+    cta_guardrails_playbook,
+    cta_guardrails_ab,
 ):
-    trigger = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else ""
+    ctx = callback_context
 
-    if trigger == "guide-open-overview":
-        return "overview", "customer-lookup"
+    if not ctx.triggered:
+        raise PreventUpdate
 
-    if trigger in ["guide-open-campaigns", "action-open-campaigns"]:
-        return "campaigns-offers", "customer-lookup"
+    trigger = ctx.triggered[0]["prop_id"].split(".")[0]
 
-    if trigger == "guide-open-scenario":
-        return "decision-workbench", "scenario-simulator"
+    route_map = {
+        "guide-open-overview": ("overview", "customer-lookup"),
+        "guide-open-campaigns": ("campaigns-offers", "customer-lookup"),
+        "guide-open-scenario": ("decision-workbench", "scenario"),
+        "guide-open-ab": ("decision-workbench", "ab-test-planner"),
+        "guide-open-export": ("decision-workbench", "customer-explorer"),
+        "guide-open-guardrails": ("guardrails", "customer-lookup"),
 
-    if trigger == "guide-open-ab":
-        return "decision-workbench", "ab-test-planner"
+        "action-open-campaigns": ("campaigns-offers", "customer-lookup"),
+        "action-open-customer-tools": ("decision-workbench", "customer-explorer"),
+        "action-open-guardrails": ("guardrails", "customer-lookup"),
 
-    if trigger == "guide-open-export":
-        return "decision-workbench", "customer-explorer"
+        "cta-open-scenario": ("decision-workbench", "scenario"),
+        "cta-open-ab": ("decision-workbench", "ab-test-planner"),
+        "cta-open-audience": ("decision-workbench", "customer-explorer"),
+        "cta-open-guardrails": ("guardrails", "customer-lookup"),
 
-    if trigger == "action-open-customer-tools":
-        return "decision-workbench", "customer-lookup"
+        "cta-playbook-campaigns": ("campaigns-offers", "customer-lookup"),
+        "cta-playbook-scenario": ("decision-workbench", "scenario"),
+        "cta-playbook-audience": ("decision-workbench", "customer-explorer"),
+        "cta-playbook-guardrails": ("guardrails", "customer-lookup"),
 
-    if trigger in ["guide-open-guardrails", "action-open-guardrails"]:
-        return "guardrails", "customer-lookup"
+        "cta-guardrails-audience": ("decision-workbench", "customer-explorer"),
+        "cta-guardrails-playbook": ("strategy-playbook", "customer-lookup"),
+        "cta-guardrails-ab": ("decision-workbench", "ab-test-planner"),
+    }
 
-    raise PreventUpdate
+    if trigger not in route_map:
+        raise PreventUpdate
 
-
-
-def apply_global_filters(selected_segments, selected_decisions, selected_risks, selected_actions) -> pd.DataFrame:
-    filtered = customer_features.copy()
-
-    if selected_segments:
-        filtered = filtered[filtered["customer_segment"].isin(selected_segments)]
-
-    if selected_decisions:
-        filtered = filtered[filtered["decision_status"].isin(selected_decisions)]
-
-    if selected_risks:
-        filtered = filtered[filtered["risk_band"].isin(selected_risks)]
-
-    if selected_actions:
-        filtered = filtered[filtered["recommended_action"].isin(selected_actions)]
-
-    return filtered
-
-
-def empty_figure(title: str, message: str = "No customers match the selected filters"):
-    fig = go.Figure()
-    fig.add_annotation(
-        text=message,
-        x=0.5,
-        y=0.5,
-        showarrow=False,
-        font=dict(size=16, color="#6b7280"),
-    )
-    fig.update_layout(
-        title=title,
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
-        margin=dict(l=40, r=40, t=60, b=40),
-        font=dict(family="Arial", size=13, color="#1f2937"),
-    )
-    return fig
-
-
-def build_decision_share_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Decision Status Share")
-
-    counts = df["decision_status"].value_counts().reset_index()
-    counts.columns = ["decision_status", "customer_count"]
-
-    fig = px.pie(
-        counts,
-        names="decision_status",
-        values="customer_count",
-        hole=0.45,
-        title="Decision Status Share",
-        color="decision_status",
-        color_discrete_map=DECISION_COLOR_MAP,
-    )
-    fig.update_layout(
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        margin=dict(l=20, r=20, t=55, b=20),
-        font=dict(family="Arial", size=13, color="#1f2937"),
-        legend_title_text="Decision",
-    )
-    return fig
-
-
-def build_decision_count_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Decision Status Count")
-
-    counts = df["decision_status"].value_counts().reset_index()
-    counts.columns = ["decision_status", "customer_count"]
-
-    fig = px.bar(
-        counts,
-        x="decision_status",
-        y="customer_count",
-        text="customer_count",
-        title="Decision Status Count",
-        color="decision_status",
-        color_discrete_map=DECISION_COLOR_MAP,
-    )
-    fig.update_traces(texttemplate="%{text:,}", textposition="outside")
-    fig.update_layout(
-        xaxis_title="Decision Status",
-        yaxis_title="Customer Count",
-        showlegend=False,
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        margin=dict(l=40, r=30, t=55, b=40),
-        font=dict(family="Arial", size=13, color="#1f2937"),
-    )
-    return fig
-
-
-def build_segment_size_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Customer Count by Segment")
-
-    grouped = (
-        df.groupby("customer_segment", as_index=False)
-        .agg(customer_count=("customer_id", "count"))
-        .sort_values("customer_count", ascending=True)
-    )
-
-    fig = px.bar(
-        grouped,
-        x="customer_count",
-        y="customer_segment",
-        orientation="h",
-        text="customer_count",
-        title="Customer Count by Segment",
-    )
-    fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#2563eb")
-    fig.update_layout(
-        xaxis_title="Customer Count",
-        yaxis_title="Customer Segment",
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        margin=dict(l=40, r=30, t=55, b=40),
-        font=dict(family="Arial", size=13, color="#1f2937"),
-    )
-    return fig
-
-
-def build_segment_eligibility_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Campaign Eligible Rate by Segment")
-
-    grouped = (
-        df.groupby("customer_segment", as_index=False)
-        .agg(campaign_eligible_rate=("campaign_eligible_flag", "mean"))
-        .sort_values("campaign_eligible_rate", ascending=True)
-    )
-
-    fig = px.bar(
-        grouped,
-        x="campaign_eligible_rate",
-        y="customer_segment",
-        orientation="h",
-        text="campaign_eligible_rate",
-        title="Campaign Eligible Rate by Segment",
-    )
-    fig.update_traces(texttemplate="%{text:.1%}", textposition="outside", marker_color="#0ea5e9")
-    fig.update_layout(
-        xaxis_title="Eligible Rate",
-        yaxis_title="Customer Segment",
-        xaxis_tickformat=".0%",
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        margin=dict(l=40, r=30, t=55, b=40),
-        font=dict(family="Arial", size=13, color="#1f2937"),
-    )
-    return fig
-
-
-def build_segment_decision_mix_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Decision Mix by Segment")
-
-    grouped = (
-        df.groupby(["customer_segment", "decision_status"], as_index=False)
-        .agg(customer_count=("customer_id", "count"))
-    )
-
-    fig = px.bar(
-        grouped,
-        x="customer_segment",
-        y="customer_count",
-        color="decision_status",
-        title="Decision Mix by Segment",
-        color_discrete_map=DECISION_COLOR_MAP,
-    )
-    fig.update_layout(
-        xaxis_title="Customer Segment",
-        yaxis_title="Customer Count",
-        xaxis_tickangle=-25,
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        margin=dict(l=40, r=30, t=55, b=110),
-        font=dict(family="Arial", size=13, color="#1f2937"),
-        legend_title_text="Decision",
-    )
-    return fig
-
-
-def build_action_mix_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Recommended Action Mix")
-
-    counts = df["recommended_action"].value_counts().reset_index()
-    counts.columns = ["recommended_action", "customer_count"]
-
-    fig = px.pie(
-        counts,
-        names="recommended_action",
-        values="customer_count",
-        hole=0.42,
-        title="Recommended Action Mix",
-    )
-    fig.update_layout(
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        margin=dict(l=20, r=20, t=55, b=20),
-        font=dict(family="Arial", size=13, color="#1f2937"),
-        legend_title_text="Action",
-    )
-    return fig
-
-
-def build_offer_type_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Treatment Type Distribution")
-
-    counts = df["offer_type"].value_counts().reset_index()
-    counts.columns = ["offer_type", "customer_count"]
-
-    fig = px.bar(
-        counts.sort_values("customer_count", ascending=True),
-        x="customer_count",
-        y="offer_type",
-        orientation="h",
-        text="customer_count",
-        title="Treatment Type Distribution",
-    )
-    fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#7c3aed")
-    fig.update_layout(
-        xaxis_title="Customer Count",
-        yaxis_title="Treatment Type",
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        margin=dict(l=40, r=30, t=55, b=40),
-        font=dict(family="Arial", size=13, color="#1f2937"),
-    )
-    return fig
-
-
-def build_risk_band_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Risk Band Distribution")
-
-    counts = df["risk_band"].value_counts().reset_index()
-    counts.columns = ["risk_band", "customer_count"]
-
-    fig = px.pie(
-        counts,
-        names="risk_band",
-        values="customer_count",
-        hole=0.45,
-        title="Risk Band Distribution",
-        color="risk_band",
-        color_discrete_map=RISK_COLOR_MAP,
-    )
-    fig.update_layout(
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        margin=dict(l=20, r=20, t=55, b=20),
-        font=dict(family="Arial", size=13, color="#1f2937"),
-        legend_title_text="Risk Band",
-    )
-    return fig
-
-
-def build_high_utilization_fig(df: pd.DataFrame):
-    filtered = df[df["customer_segment"] == "High-Utilization Revolver"]
-
-    if filtered.empty:
-        return empty_figure(
-            "High-Utilization Revolver Decision Mix",
-            "No High-Utilization Revolver customers match the selected filters",
-        )
-
-    counts = filtered["decision_status"].value_counts().reset_index()
-    counts.columns = ["decision_status", "customer_count"]
-
-    fig = px.bar(
-        counts,
-        x="decision_status",
-        y="customer_count",
-        text="customer_count",
-        title="High-Utilization Revolver Decision Mix",
-        color="decision_status",
-        color_discrete_map=DECISION_COLOR_MAP,
-    )
-    fig.update_traces(texttemplate="%{text:,}", textposition="outside")
-    fig.update_layout(
-        xaxis_title="Decision Status",
-        yaxis_title="Customer Count",
-        showlegend=False,
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        margin=dict(l=40, r=30, t=55, b=40),
-        font=dict(family="Arial", size=13, color="#1f2937"),
-    )
-    return fig
-
-
-def build_blocked_segment_fig(df: pd.DataFrame):
-    filtered = df[df["decision_status"] == "Block"]
-
-    if filtered.empty:
-        return empty_figure(
-            "Blocked Customers by Segment",
-            "No blocked customers match the selected filters",
-        )
-
-    grouped = (
-        filtered.groupby("customer_segment", as_index=False)
-        .agg(blocked_customers=("customer_id", "count"))
-        .sort_values("blocked_customers", ascending=True)
-    )
-
-    fig = px.bar(
-        grouped,
-        x="blocked_customers",
-        y="customer_segment",
-        orientation="h",
-        text="blocked_customers",
-        title="Blocked Customers by Segment",
-    )
-    fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#dc2626")
-    fig.update_layout(
-        xaxis_title="Blocked Customers",
-        yaxis_title="Customer Segment",
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        margin=dict(l=40, r=30, t=55, b=40),
-        font=dict(family="Arial", size=13, color="#1f2937"),
-    )
-    return fig
+    return route_map[trigger]
 
 
 
