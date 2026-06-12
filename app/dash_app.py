@@ -1819,6 +1819,325 @@ def create_strategy_cta_panel() -> html.Div:
 
 
 
+
+def create_governance_layout() -> html.Div:
+    governance_cards = [
+        {
+            "title": "Synthetic data only",
+            "body": "The dashboard uses synthetic customer records for portfolio analytics demonstration. No real customer data, account data, or bank-confidential data is used.",
+            "accent": "#2563eb",
+        },
+        {
+            "title": "Not a credit approval model",
+            "body": "This engine is not used to approve, deny, price, or underwrite credit. It is a campaign decisioning prototype for existing cardholder engagement.",
+            "accent": "#dc2626",
+        },
+        {
+            "title": "Campaign decisioning only",
+            "body": "The model recommends campaign posture such as Scale, Test, Constrain, Do Not Launch, or Block for marketing and portfolio strategy use cases.",
+            "accent": "#7c3aed",
+        },
+        {
+            "title": "Human review required",
+            "body": "Any real deployment would require review by risk, compliance, marketing, product, legal, and model governance teams before launch.",
+            "accent": "#f97316",
+        },
+        {
+            "title": "Fairness testing required",
+            "body": "Before production, the bank would need fairness and adverse-impact testing across protected and sensitive groups using approved governance methods.",
+            "accent": "#16a34a",
+        },
+        {
+            "title": "Monitoring and drift checks",
+            "body": "Campaign performance, risk distribution, default behavior, response rate, ROI, and segment drift should be monitored after deployment.",
+            "accent": "#0ea5e9",
+        },
+    ]
+
+    control_rows = [
+        {
+            "control": "Input validation",
+            "purpose": "Check required fields, missing values, outliers, and valid ranges before scoring.",
+            "status": "Prototype-ready",
+            "owner": "Data / Analytics",
+        },
+        {
+            "control": "Risk guardrails",
+            "purpose": "Prevent aggressive growth campaigns from reaching high-risk or high-stress customers.",
+            "status": "Implemented",
+            "owner": "Credit Risk",
+        },
+        {
+            "control": "Campaign eligibility rules",
+            "purpose": "Match campaigns to the right segments while excluding risky or unsuitable audiences.",
+            "status": "Implemented",
+            "owner": "Portfolio Marketing",
+        },
+        {
+            "control": "A/B test validation",
+            "purpose": "Require controlled experiments before scaling uncertain campaigns.",
+            "status": "Implemented",
+            "owner": "Experimentation / Product",
+        },
+        {
+            "control": "Fairness and bias review",
+            "purpose": "Evaluate whether campaign eligibility or treatment decisions create unfair outcomes.",
+            "status": "Required before production",
+            "owner": "Model Risk / Compliance",
+        },
+        {
+            "control": "Model documentation",
+            "purpose": "Document inputs, assumptions, rules, thresholds, limitations, and approval workflow.",
+            "status": "Needed for final project docs",
+            "owner": "Analytics / Governance",
+        },
+        {
+            "control": "Performance monitoring",
+            "purpose": "Track response rate, lift, profit, losses, customer complaints, and risk drift after launch.",
+            "status": "Recommended next",
+            "owner": "Business + Risk",
+        },
+        {
+            "control": "Audit trail",
+            "purpose": "Preserve campaign version, scoring date, selected audience, decision rules, and approval record.",
+            "status": "Recommended next",
+            "owner": "Governance / Operations",
+        },
+    ]
+
+    header_style = {
+        "padding": "12px",
+        "fontSize": "12px",
+        "fontWeight": "900",
+        "color": COLORS["muted"],
+        "textTransform": "uppercase",
+        "borderBottom": f"1px solid {COLORS['border']}",
+        "backgroundColor": "#f8fafc",
+        "textAlign": "left",
+    }
+
+    cell_style = {
+        "padding": "12px",
+        "fontSize": "13px",
+        "lineHeight": "1.4",
+        "borderBottom": f"1px solid {COLORS['border']}",
+        "verticalAlign": "top",
+    }
+
+    return html.Div(
+        children=[
+            create_tab_intro(
+                "Governance & Responsible Use",
+                "This page explains how the decision engine should be controlled in a banking environment. It documents what the prototype is, what it is not, and which checks are required before any real-world deployment.",
+            ),
+
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div(
+                                style={
+                                    "height": "5px",
+                                    "width": "44px",
+                                    "backgroundColor": card["accent"],
+                                    "borderRadius": "999px",
+                                    "marginBottom": "12px",
+                                },
+                            ),
+                            html.H4(
+                                card["title"],
+                                style={"margin": "0 0 8px 0", "fontSize": "16px", "fontWeight": "900"},
+                            ),
+                            html.P(
+                                card["body"],
+                                style={"margin": "0", "fontSize": "13px", "lineHeight": "1.5", "color": COLORS["muted"]},
+                            ),
+                        ],
+                        title=card["body"],
+                        style={
+                            "backgroundColor": COLORS["card"],
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderRadius": "16px",
+                            "padding": "16px",
+                            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                        },
+                    )
+                    for card in governance_cards
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "repeat(3, 1fr)",
+                    "gap": "16px",
+                    "marginTop": "18px",
+                },
+            ),
+
+            html.Div(
+                children=[
+                    html.H3(
+                        "Model Controls Checklist",
+                        style={"fontSize": "22px", "fontWeight": "900", "margin": "0 0 8px 0"},
+                    ),
+                    html.P(
+                        "These controls show how the prototype would need to be governed before being used in a real financial institution.",
+                        style={"color": COLORS["muted"], "lineHeight": "1.5", "margin": "0 0 16px 0"},
+                    ),
+                    html.Table(
+                        children=[
+                            html.Thead(
+                                html.Tr(
+                                    [
+                                        html.Th("Control", style=header_style),
+                                        html.Th("Purpose", style=header_style),
+                                        html.Th("Status", style=header_style),
+                                        html.Th("Owner", style=header_style),
+                                    ]
+                                )
+                            ),
+                            html.Tbody(
+                                [
+                                    html.Tr(
+                                        children=[
+                                            html.Td(row["control"], style={**cell_style, "fontWeight": "900"}),
+                                            html.Td(row["purpose"], style=cell_style),
+                                            html.Td(row["status"], style=cell_style),
+                                            html.Td(row["owner"], style=cell_style),
+                                        ],
+                                        title=f"{row['control']}: {row['purpose']}",
+                                    )
+                                    for row in control_rows
+                                ]
+                            ),
+                        ],
+                        style={
+                            "width": "100%",
+                            "borderCollapse": "collapse",
+                            "backgroundColor": "#ffffff",
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderRadius": "14px",
+                            "overflow": "hidden",
+                        },
+                    ),
+                ],
+                style={
+                    "backgroundColor": COLORS["card"],
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "18px",
+                    "padding": "22px",
+                    "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                    "marginTop": "18px",
+                    "overflowX": "auto",
+                },
+            ),
+
+            create_insight_card(
+                "Production-readiness note",
+                "For millions of customers, this prototype should move scoring and filtering out of the Dash front end and into a scalable data layer such as SQL, Spark, Snowflake, Databricks, or a batch scoring pipeline. The dashboard should query summarized and paginated outputs instead of loading every row into memory.",
+                variant="warning",
+            ),
+        ]
+    )
+
+
+
+
+def create_compact_governance_panel() -> html.Details:
+    governance_items = [
+        ("Synthetic data only", "No real customer, account, or bank-confidential data is used."),
+        ("Not credit approval", "This is campaign decisioning for existing cardholders, not underwriting, pricing, approval, or denial."),
+        ("Human review required", "Risk, compliance, product, marketing, legal, and model governance teams would review before production."),
+        ("Fairness review required", "Real deployment would require fairness and adverse-impact testing using approved governance methods."),
+        ("Monitoring required", "Track response rate, lift, losses, complaints, ROI, risk drift, and segment drift after launch."),
+        ("Scalable production design", "For millions of customers, scoring and filtering should move to SQL/Spark/Snowflake/Databricks or a batch pipeline."),
+    ]
+
+    controls = [
+        ("Input validation", "Required fields, missing values, ranges, and outliers."),
+        ("Risk guardrails", "Prevent aggressive growth offers for high-risk or high-stress customers."),
+        ("Campaign eligibility rules", "Match campaigns to suitable audiences and exclude unsuitable ones."),
+        ("Experiment validation", "Use A/B testing before scaling uncertain campaigns."),
+        ("Audit trail", "Preserve campaign version, scoring date, audience, rules, and approval record."),
+    ]
+
+    return html.Details(
+        children=[
+            html.Summary(
+                "Governance & responsible-use checklist",
+                title="Expand this section to review responsible-use, compliance, and production-readiness controls.",
+                style={
+                    "fontSize": "18px",
+                    "fontWeight": "900",
+                    "cursor": "pointer",
+                    "color": COLORS["text"],
+                    "padding": "4px 0",
+                },
+            ),
+            html.P(
+                "Use this as the final control checklist before any campaign is launched. It keeps the dashboard workflow clean while still documenting responsible use.",
+                style={"color": COLORS["muted"], "lineHeight": "1.5", "margin": "12px 0 16px 0"},
+            ),
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div(title, style={"fontWeight": "900", "fontSize": "14px", "marginBottom": "6px"}),
+                            html.Div(body, style={"color": COLORS["muted"], "fontSize": "13px", "lineHeight": "1.45"}),
+                        ],
+                        title=body,
+                        style={
+                            "backgroundColor": "#ffffff",
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderRadius": "14px",
+                            "padding": "14px",
+                        },
+                    )
+                    for title, body in governance_items
+                ],
+                style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "12px"},
+            ),
+            html.Div(
+                children=[
+                    html.H4(
+                        "Production controls",
+                        style={"fontSize": "16px", "fontWeight": "900", "margin": "18px 0 10px 0"},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div(
+                                children=[
+                                    html.Span(control, style={"fontWeight": "900"}),
+                                    html.Span(f" — {purpose}", style={"color": COLORS["muted"]}),
+                                ],
+                                title=purpose,
+                                style={
+                                    "padding": "10px 12px",
+                                    "border": f"1px solid {COLORS['border']}",
+                                    "borderRadius": "12px",
+                                    "backgroundColor": "#f8fafc",
+                                    "fontSize": "13px",
+                                },
+                            )
+                            for control, purpose in controls
+                        ],
+                        style={"display": "grid", "gridTemplateColumns": "repeat(2, 1fr)", "gap": "10px"},
+                    ),
+                ]
+            ),
+        ],
+        open=False,
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "18px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+            "marginTop": "18px",
+            "marginBottom": "18px",
+        },
+    )
+
+
+
 def create_filter_panel() -> html.Div:
     segment_options = [
         {"label": segment, "value": segment}
@@ -3794,7 +4113,7 @@ app.layout = html.Div(
                     ],
                 ),
 
-dcc.Tab(
+                dcc.Tab(
                     label="Guardrails",
                     value="guardrails",
                     style=tab_style,
@@ -3804,6 +4123,7 @@ dcc.Tab(
                             "Responsible Lending Guardrails",
                             "This tab checks whether the engine is protecting customers who may carry higher credit risk. The goal is to separate profitable growth from risky growth and prevent aggressive offers from going to the wrong groups.",
                         ),
+                        create_compact_governance_panel(),
                         html.Div(
                             children=[
                                 create_kpi_card("Total Blocked Customers", f"{total_blocked:,}", "Blocked from growth campaigns", "#dc2626"),
