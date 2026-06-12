@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import base64
+import io
 
 import pandas as pd
 import plotly.express as px
@@ -2285,6 +2287,409 @@ def create_guardrails_action_panel() -> html.Div:
 
 
 
+
+
+REQUIRED_UPLOAD_COLUMNS = [
+    "customer_id",
+    "age",
+    "income",
+    "credit_score",
+    "credit_limit",
+    "current_balance",
+    "monthly_spend",
+    "transactions_count",
+    "customer_tenure_months",
+    "late_payments_12m",
+    "revolving_balance",
+]
+
+
+OPTIONAL_UPLOAD_COLUMNS = [
+    "customer_name",
+    "customer_email",
+    "phone_number",
+    "city",
+    "state",
+    "zip_code",
+    "employment_status",
+    "occupation_group",
+    "preferred_channel",
+    "relationship_tier",
+    "signup_channel",
+    "account_open_date",
+    "digital_engagement_score",
+    "last_app_login_days",
+    "autopay_enrolled",
+    "paperless_enrolled",
+    "card_type",
+    "rewards_preference",
+    "grocery_spend",
+    "dining_spend",
+    "travel_spend",
+    "gas_spend",
+    "online_spend",
+]
+
+
+DERIVED_ENGINE_COLUMNS = [
+    "utilization_rate",
+    "default_probability",
+    "risk_band",
+    "customer_segment",
+    "risk_adjusted_profit",
+    "expected_roi",
+    "recommended_action",
+    "offer_type",
+    "decision_status",
+    "campaign_eligible_flag",
+    "risk_guardrail_flag",
+]
+
+
+def build_schema_template_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "customer_id": "100001",
+                "age": 34,
+                "income": 85000,
+                "credit_score": 710,
+                "credit_limit": 12000,
+                "current_balance": 2800,
+                "monthly_spend": 3200,
+                "transactions_count": 42,
+                "customer_tenure_months": 36,
+                "late_payments_12m": 0,
+                "revolving_balance": 1400,
+                "customer_name": "Demo Customer One",
+                "customer_email": "demo.customer.one@example.com",
+                "phone_number": "555-000-1001",
+                "city": "Charlotte",
+                "state": "NC",
+                "zip_code": "28202",
+                "employment_status": "Full-Time",
+                "occupation_group": "Technology",
+                "preferred_channel": "Email",
+                "relationship_tier": "Gold",
+                "signup_channel": "Mobile App",
+                "account_open_date": "2022-04-15",
+                "digital_engagement_score": 82,
+                "last_app_login_days": 4,
+                "autopay_enrolled": "Yes",
+                "paperless_enrolled": "Yes",
+                "card_type": "Platinum",
+                "rewards_preference": "Cashback",
+                "grocery_spend": 620,
+                "dining_spend": 410,
+                "travel_spend": 300,
+                "gas_spend": 180,
+                "online_spend": 720,
+            },
+            {
+                "customer_id": "100002",
+                "age": 46,
+                "income": 112000,
+                "credit_score": 675,
+                "credit_limit": 18000,
+                "current_balance": 9200,
+                "monthly_spend": 4100,
+                "transactions_count": 55,
+                "customer_tenure_months": 72,
+                "late_payments_12m": 1,
+                "revolving_balance": 6800,
+                "customer_name": "Demo Customer Two",
+                "customer_email": "demo.customer.two@example.com",
+                "phone_number": "555-000-1002",
+                "city": "Boston",
+                "state": "MA",
+                "zip_code": "02115",
+                "employment_status": "Full-Time",
+                "occupation_group": "Healthcare",
+                "preferred_channel": "Mobile App",
+                "relationship_tier": "Standard",
+                "signup_channel": "Branch",
+                "account_open_date": "2020-08-20",
+                "digital_engagement_score": 64,
+                "last_app_login_days": 18,
+                "autopay_enrolled": "No",
+                "paperless_enrolled": "Yes",
+                "card_type": "Quicksilver",
+                "rewards_preference": "Dining",
+                "grocery_spend": 510,
+                "dining_spend": 780,
+                "travel_spend": 120,
+                "gas_spend": 260,
+                "online_spend": 550,
+            },
+        ]
+    )
+
+
+def create_data_source_center() -> html.Details:
+    def schema_card(column: str, group: str, description: str, accent: str) -> html.Div:
+        return html.Div(
+            children=[
+                html.Div(column, style={"fontWeight": "900", "fontSize": "13px"}),
+                html.Div(
+                    description,
+                    style={"fontSize": "12px", "color": COLORS["muted"], "lineHeight": "1.35", "marginTop": "3px"},
+                ),
+            ],
+            title=f"{group}: {column}",
+            style={
+                "border": f"1px solid {COLORS['border']}",
+                "borderTop": f"4px solid {accent}",
+                "borderRadius": "12px",
+                "padding": "10px 12px",
+                "backgroundColor": "#ffffff",
+            },
+        )
+
+    required_rows = [
+        schema_card(
+            column,
+            "Required",
+            "Minimum field needed to score the customer.",
+            COLORS["blue"],
+        )
+        for column in REQUIRED_UPLOAD_COLUMNS
+    ]
+
+    optional_rows = [
+        schema_card(
+            column,
+            "Optional",
+            "Improves profile, targeting, segmentation, or campaign context.",
+            "#16a34a",
+        )
+        for column in OPTIONAL_UPLOAD_COLUMNS
+    ]
+
+    derived_rows = [
+        schema_card(
+            column,
+            "Derived",
+            "Calculated by the decision engine after upload.",
+            "#7c3aed",
+        )
+        for column in DERIVED_ENGINE_COLUMNS
+    ]
+
+    return html.Details(
+        children=[
+            html.Summary(
+                "Data Source & Schema Center",
+                title="Expand to review upload requirements, download templates, and prepare external customer data.",
+                style={
+                    "fontSize": "18px",
+                    "fontWeight": "900",
+                    "cursor": "pointer",
+                    "color": COLORS["text"],
+                    "padding": "4px 0",
+                },
+            ),
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div(
+                                "Current data mode",
+                                style={"fontSize": "12px", "fontWeight": "900", "color": COLORS["muted"], "textTransform": "uppercase"},
+                            ),
+                            html.H3(
+                                "Synthetic demo portfolio",
+                                style={"margin": "6px 0 8px 0", "fontSize": "22px", "fontWeight": "900"},
+                            ),
+                            html.P(
+                                "The dashboard is currently powered by the built-in synthetic customer portfolio. Upload validation is now available, and full upload-to-dashboard switching will be connected next.",
+                                style={"margin": "0", "color": COLORS["muted"], "lineHeight": "1.5"},
+                            ),
+                        ],
+                        title="Current mode uses synthetic data. Later, uploaded CSV or Excel files will replace this active dataset.",
+                        style={
+                            "backgroundColor": "#eff6ff",
+                            "border": "1px solid #bfdbfe",
+                            "borderRadius": "16px",
+                            "padding": "16px",
+                        },
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div(
+                                "Schema logic",
+                                style={"fontSize": "12px", "fontWeight": "900", "color": COLORS["muted"], "textTransform": "uppercase"},
+                            ),
+                            html.H3(
+                                "Minimum required + optional enrichment",
+                                style={"margin": "6px 0 8px 0", "fontSize": "22px", "fontWeight": "900"},
+                            ),
+                            html.P(
+                                "The required columns are the minimum fields needed for scoring. Optional fields make the dashboard richer. Derived fields are calculated by the engine.",
+                                style={"margin": "0", "color": COLORS["muted"], "lineHeight": "1.5"},
+                            ),
+                        ],
+                        title="Required fields score the customer. Optional fields enrich the product workflow. Derived fields are generated by the engine.",
+                        style={
+                            "backgroundColor": "#f0fdf4",
+                            "border": "1px solid #bbf7d0",
+                            "borderRadius": "16px",
+                            "padding": "16px",
+                        },
+                    ),
+                ],
+                style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "14px", "marginTop": "16px"},
+            ),
+            html.Div(
+                children=[
+                    dcc.Upload(
+                        id="customer-data-upload",
+                        accept=".csv,.xlsx,.xls",
+                        multiple=False,
+                        children=html.Div(
+                            children=[
+                                html.Div(
+                                    "Click here to upload customer data",
+                                    style={"fontSize": "18px", "fontWeight": "900", "marginBottom": "8px"},
+                                ),
+                                html.Div(
+                                    "CSV, XLSX, or XLS accepted",
+                                    style={"fontSize": "14px", "color": COLORS["muted"], "marginBottom": "12px"},
+                                ),
+                                html.Div(
+                                    "Choose File",
+                                    style={
+                                        "display": "inline-block",
+                                        "backgroundColor": COLORS["blue"],
+                                        "color": "white",
+                                        "borderRadius": "12px",
+                                        "padding": "10px 18px",
+                                        "fontWeight": "900",
+                                    },
+                                ),
+                            ],
+                            style={"textAlign": "center"},
+                        ),
+                        style={
+                            "width": "100%",
+                            "border": "2px dashed #60a5fa",
+                            "borderRadius": "18px",
+                            "padding": "34px",
+                            "backgroundColor": "#f8fafc",
+                            "cursor": "pointer",
+                            "boxSizing": "border-box",
+                        },
+                    ),
+                    html.Div(id="customer-data-upload-message"),
+                    html.Div(id="upload-preview-modal-container"),
+                ],
+                title="Upload a CSV or Excel file to validate columns and preview the data.",
+                style={"marginTop": "16px"},
+            ),
+            html.Div(
+                children=[
+                    html.Button(
+                        "Download CSV Template",
+                        id="download-schema-csv-button",
+                        n_clicks=0,
+                        title="Download a CSV file with required and optional upload columns.",
+                        style={
+                            "backgroundColor": COLORS["blue"],
+                            "color": "white",
+                            "border": "none",
+                            "borderRadius": "12px",
+                            "padding": "10px 14px",
+                            "fontWeight": "900",
+                            "cursor": "pointer",
+                        },
+                    ),
+                    html.Button(
+                        "Download Excel Template",
+                        id="download-schema-excel-button",
+                        n_clicks=0,
+                        title="Download an Excel file with required and optional upload columns.",
+                        style={
+                            "backgroundColor": "#16a34a",
+                            "color": "white",
+                            "border": "none",
+                            "borderRadius": "12px",
+                            "padding": "10px 14px",
+                            "fontWeight": "900",
+                            "cursor": "pointer",
+                        },
+                    ),
+                    dcc.Download(id="download-schema-csv"),
+                    dcc.Download(id="download-schema-excel"),
+                ],
+                style={"display": "flex", "gap": "10px", "flexWrap": "wrap", "marginTop": "16px"},
+            ),
+            html.Div(
+                children=[
+                    html.H4("Minimum required upload columns", style={"fontSize": "16px", "fontWeight": "900", "marginBottom": "10px"}),
+                    html.Div(
+                        children=required_rows,
+                        style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "10px"},
+                    ),
+                ],
+                style={"marginTop": "16px"},
+            ),
+            html.Details(
+                children=[
+                    html.Summary(
+                        "Recommended optional fields",
+                        style={"cursor": "pointer", "fontWeight": "900", "fontSize": "16px", "marginBottom": "12px"},
+                    ),
+                    html.Div(
+                        children=optional_rows,
+                        style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "10px"},
+                    ),
+                ],
+                open=False,
+                style={"marginTop": "16px"},
+            ),
+            html.Details(
+                children=[
+                    html.Summary(
+                        "Fields created by the engine",
+                        style={"cursor": "pointer", "fontWeight": "900", "fontSize": "16px", "marginBottom": "12px"},
+                    ),
+                    html.Div(
+                        children=derived_rows,
+                        style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "10px"},
+                    ),
+                ],
+                open=False,
+                style={"marginTop": "16px"},
+            ),
+            html.Div(
+                children=[
+                    html.Strong("Next build step: "),
+                    "validated uploaded files will be scored through the decision engine, stored as the active dataset, and used to refresh every KPI, chart, table, scenario, A/B planner, export, guardrail, and playbook section.",
+                ],
+                title="This explains the next development step and why this section is currently validation-only.",
+                style={
+                    "marginTop": "16px",
+                    "backgroundColor": "#fff7ed",
+                    "border": "1px solid #fed7aa",
+                    "borderRadius": "14px",
+                    "padding": "14px",
+                    "color": "#7c2d12",
+                    "lineHeight": "1.5",
+                },
+            ),
+        ],
+        open=False,
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "18px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+            "marginTop": "18px",
+            "marginBottom": "18px",
+        },
+    )
+
+
 def create_filter_panel() -> html.Div:
     segment_options = [
         {"label": segment, "value": segment}
@@ -4010,6 +4415,8 @@ app.layout = html.Div(
             },
         ),
 
+        create_data_source_center(),
+
         create_filter_panel(),
 
         create_workflow_guide(),
@@ -4741,6 +5148,171 @@ def build_blocked_customers_fig(df: pd.DataFrame):
 
 def build_guardrail_blocked_segment_fig(df: pd.DataFrame):
     return build_blocked_segment_fig(df)
+
+
+
+
+
+
+
+@app.callback(
+    Output("customer-data-upload-message", "children"),
+    Input("customer-data-upload", "contents"),
+    State("customer-data-upload", "filename"),
+    prevent_initial_call=True,
+)
+def validate_customer_data_upload(contents, filename):
+    if not contents:
+        raise PreventUpdate
+
+    try:
+        content_type, content_string = contents.split(",", 1)
+        decoded = base64.b64decode(content_string)
+
+        lower_filename = (filename or "").lower()
+
+        if lower_filename.endswith(".csv"):
+            uploaded_df = pd.read_csv(io.StringIO(decoded.decode("utf-8")))
+        elif lower_filename.endswith((".xlsx", ".xls")):
+            uploaded_df = pd.read_excel(io.BytesIO(decoded))
+        else:
+            return html.Div(
+                children=[
+                    html.Strong("Upload fired, but file type is unsupported."),
+                    html.Div(f"File: {filename}", style={"marginTop": "4px"}),
+                    html.Div("Please upload CSV, XLSX, or XLS.", style={"marginTop": "4px"}),
+                ],
+                style={
+                    "marginTop": "12px",
+                    "backgroundColor": "#fef2f2",
+                    "border": "1px solid #fecaca",
+                    "borderRadius": "12px",
+                    "padding": "12px",
+                    "color": "#7f1d1d",
+                },
+            )
+
+        uploaded_columns = list(uploaded_df.columns)
+        missing_required = [col for col in REQUIRED_UPLOAD_COLUMNS if col not in uploaded_columns]
+        detected_required = [col for col in REQUIRED_UPLOAD_COLUMNS if col in uploaded_columns]
+        detected_optional = [col for col in OPTIONAL_UPLOAD_COLUMNS if col in uploaded_columns]
+
+        ready = len(missing_required) == 0
+        preview_df = uploaded_df.head(5).copy()
+
+        return html.Div(
+            children=[
+                html.Div(
+                    children=[
+                        html.Strong("Upload fired successfully: "),
+                        filename,
+                        html.Div(
+                            f"Rows: {len(uploaded_df):,} | Columns: {len(uploaded_columns):,} | Required fields: {len(detected_required)} / {len(REQUIRED_UPLOAD_COLUMNS)} | Optional fields: {len(detected_optional)} / {len(OPTIONAL_UPLOAD_COLUMNS)}",
+                            style={"marginTop": "6px"},
+                        ),
+                        html.Div(
+                            "Ready for scoring connection." if ready else "Missing required fields: " + ", ".join(missing_required),
+                            style={"marginTop": "6px", "fontWeight": "800"},
+                        ),
+                    ],
+                    style={
+                        "backgroundColor": "#f0fdf4" if ready else "#fff7ed",
+                        "border": "1px solid #bbf7d0" if ready else "1px solid #fed7aa",
+                        "borderRadius": "12px",
+                        "padding": "14px",
+                        "color": "#14532d" if ready else "#7c2d12",
+                        "marginTop": "12px",
+                    },
+                ),
+                html.Div(
+                    children=[
+                        html.H4("Upload preview", style={"margin": "0 0 10px 0"}),
+                        dash_table.DataTable(
+                            columns=[{"name": col, "id": col} for col in preview_df.columns],
+                            data=preview_df.to_dict("records"),
+                            page_size=5,
+                            style_table={"overflowX": "auto"},
+                            style_header={
+                                "backgroundColor": "#f8fafc",
+                                "fontWeight": "900",
+                                "border": f"1px solid {COLORS['border']}",
+                            },
+                            style_cell={
+                                "padding": "8px",
+                                "fontSize": "12px",
+                                "fontFamily": "Arial",
+                                "border": f"1px solid {COLORS['border']}",
+                                "whiteSpace": "normal",
+                                "height": "auto",
+                                "textAlign": "left",
+                            },
+                        ),
+                    ],
+                    style={
+                        "marginTop": "12px",
+                        "backgroundColor": "#ffffff",
+                        "border": f"1px solid {COLORS['border']}",
+                        "borderRadius": "14px",
+                        "padding": "14px",
+                    },
+                ),
+            ]
+        )
+
+    except Exception as error:
+        return html.Div(
+            children=[
+                html.Strong("Upload fired, but file could not be parsed."),
+                html.Div(str(error), style={"marginTop": "6px"}),
+            ],
+            style={
+                "marginTop": "12px",
+                "backgroundColor": "#fef2f2",
+                "border": "1px solid #fecaca",
+                "borderRadius": "12px",
+                "padding": "12px",
+                "color": "#7f1d1d",
+            },
+        )
+
+
+
+@app.callback(
+    Output("download-schema-csv", "data"),
+    Input("download-schema-csv-button", "n_clicks"),
+    prevent_initial_call=True,
+)
+def download_schema_csv(n_clicks):
+    if not n_clicks:
+        raise PreventUpdate
+
+    template_df = build_schema_template_df()
+    return dcc.send_data_frame(
+        template_df.to_csv,
+        "credit_card_customer_upload_template.csv",
+        index=False,
+    )
+
+
+@app.callback(
+    Output("download-schema-excel", "data"),
+    Input("download-schema-excel-button", "n_clicks"),
+    prevent_initial_call=True,
+)
+def download_schema_excel(n_clicks):
+    if not n_clicks:
+        raise PreventUpdate
+
+    template_df = build_schema_template_df()
+    return dcc.send_data_frame(
+        template_df.to_excel,
+        "credit_card_customer_upload_template.xlsx",
+        index=False,
+        sheet_name="required_schema",
+    )
+
+
+
 
 
 @app.callback(
