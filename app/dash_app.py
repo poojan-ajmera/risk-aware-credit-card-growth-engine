@@ -16,7 +16,7 @@ import io
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, callback_context, dcc, html, dash_table, no_update
+from dash import Dash, Input, Output, State, MATCH, callback_context, dcc, html, dash_table, no_update
 from dash.exceptions import PreventUpdate
 
 
@@ -441,9 +441,15 @@ def create_campaign_table_rows(campaign_recommendations: pd.DataFrame, limit: in
     table["Risk"] = table["risk_level"].astype(str)
     table["Profit"] = pd.to_numeric(table["expected_campaign_profit"], errors="coerce").fillna(0).apply(format_currency)
     table["ROI"] = pd.to_numeric(table["expected_campaign_roi"], errors="coerce").fillna(0).apply(lambda value: f"{value:.2f}x")
-    table["Matches"] = pd.to_numeric(table["eligible_customers"], errors="coerce").fillna(0).astype(int).astype(str)
-    table["Scale"] = pd.to_numeric(table["scale_customers"], errors="coerce").fillna(0).astype(int).astype(str)
-    table["Blocked"] = pd.to_numeric(table["blocked_customers"], errors="coerce").fillna(0).astype(int).astype(str)
+    matches = pd.to_numeric(table["eligible_customers"], errors="coerce").fillna(0).astype(int)
+    scale = pd.to_numeric(table["scale_customers"], errors="coerce").fillna(0).astype(int)
+    blocked = pd.to_numeric(table["blocked_customers"], errors="coerce").fillna(0).astype(int)
+    test = (matches - scale - blocked).clip(lower=0).astype(int)
+
+    table["Matches"] = matches.apply(lambda value: f"{int(value):,}")
+    table["Scale"] = scale.apply(lambda value: f"{int(value):,}")
+    table["Test"] = test.apply(lambda value: f"{int(value):,}")
+    table["Blocked"] = blocked.apply(lambda value: f"{int(value):,}")
     table["Score"] = pd.to_numeric(table["campaign_score"], errors="coerce").fillna(0).apply(lambda value: f"{value:.1f}")
 
     return table[
@@ -457,6 +463,7 @@ def create_campaign_table_rows(campaign_recommendations: pd.DataFrame, limit: in
             "ROI",
             "Matches",
             "Scale",
+            "Test",
             "Blocked",
             "Score",
         ]
@@ -876,110 +883,255 @@ def create_metric_chip(label: str, value: str) -> html.Div:
     )
 
 
-def create_campaign_recommendation_card(row: pd.Series) -> html.Div:
-    rollout = row.get("recommended_rollout_decision", "Unknown")
+def create_campaign_recommendation_card(row: pd.Series, master_df: pd.DataFrame | None = None) -> html.Div:
+    """Create a compact campaign recommendation card with campaign-level customer export."""
+    row = row.to_dict() if hasattr(row, "to_dict") else dict(row)
 
-    rollout_colors = {
+    def safe_value(key: str, default=""):
+        value = row.get(key, default)
+        if value is None:
+            return default
+        try:
+            if pd.isna(value):
+                return default
+        except Exception:
+            pass
+        return value
+
+    campaign_name = str(safe_value("campaign_name", "Unknown Campaign"))
+    campaign_family = str(safe_value("campaign_family", "Unknown Family"))
+    rollout = str(
+        safe_value(
+            "recommended_rollout_decision",
+            safe_value("rollout_recommendation", safe_value("recommended_rollout", "Review")),
+        )
+    )
+    rank_value = safe_value("rank", safe_value("dashboard_recommendation_rank", ""))
+    campaign_key = str(rank_value if rank_value != "" else campaign_name)
+
+    eligible_count = int(float(safe_value("eligible_customers", 0) or 0))
+    scale_count = int(float(safe_value("scale_customers", 0) or 0))
+    blocked_count = int(float(safe_value("blocked_customers", 0) or 0))
+    test_count = max(eligible_count - scale_count - blocked_count, 0)
+
+    preview_rows = []
+    preview_total = 0
+
+    if master_df is not None and not master_df.empty and "customer_id" in master_df.columns:
+        def _parse_preview_ids(raw_value):
+            if raw_value is None:
+                return set()
+            try:
+                if pd.isna(raw_value):
+                    return set()
+            except Exception:
+                pass
+            return {item.strip() for item in str(raw_value).replace(",", ";").split(";") if item.strip()}
+
+        eligible_ids = _parse_preview_ids(row.get("eligible_customer_ids", ""))
+        scale_ids = _parse_preview_ids(row.get("scale_customer_ids", ""))
+        blocked_ids = _parse_preview_ids(row.get("blocked_customer_ids", ""))
+
+        if eligible_ids:
+            preview_df = master_df[master_df["customer_id"].astype(str).isin(eligible_ids)].copy()
+        else:
+            preview_df = master_df.copy()
+
+        preview_total = len(preview_df)
+
+        if not preview_df.empty:
+            def _audience_status(customer_id, decision_status):
+                customer_id = str(customer_id)
+                if customer_id in blocked_ids:
+                    return "Blocked"
+                if customer_id in scale_ids:
+                    return "Scale"
+                if str(decision_status) == "Block":
+                    return "Blocked"
+                if str(decision_status) == "Scale":
+                    return "Scale"
+                if str(decision_status) == "Test":
+                    return "Test"
+                return "Eligible"
+
+            preview_df["Audience"] = [
+                _audience_status(customer_id, decision_status)
+                for customer_id, decision_status in zip(
+                    preview_df["customer_id"],
+                    preview_df["decision_status"] if "decision_status" in preview_df.columns else [""] * len(preview_df),
+                )
+            ]
+
+            preview_df["Spend"] = (
+                pd.to_numeric(preview_df.get("monthly_spend", pd.Series([0] * len(preview_df))), errors="coerce")
+                .fillna(0)
+                .apply(lambda value: f"${value:,.0f}")
+            )
+            preview_df["Profit"] = (
+                pd.to_numeric(preview_df.get("risk_adjusted_profit", pd.Series([0] * len(preview_df))), errors="coerce")
+                .fillna(0)
+                .apply(lambda value: f"${value:,.0f}")
+            )
+            preview_df["ROI"] = (
+                pd.to_numeric(preview_df.get("expected_roi", pd.Series([0] * len(preview_df))), errors="coerce")
+                .fillna(0)
+                .apply(lambda value: f"{value:.2f}x")
+            )
+
+            preview_df = preview_df.head(5).copy()
+
+            preview_rows = pd.DataFrame(
+                {
+                    "ID": preview_df["customer_id"].astype(str),
+                    "Segment": preview_df["customer_segment"].astype(str) if "customer_segment" in preview_df.columns else "",
+                    "Risk": preview_df["risk_band"].astype(str) if "risk_band" in preview_df.columns else "",
+                    "Decision": preview_df["decision_status"].astype(str) if "decision_status" in preview_df.columns else "",
+                    "Audience": preview_df["Audience"].astype(str),
+                    "Spend": preview_df["Spend"].astype(str),
+                    "Profit": preview_df["Profit"].astype(str),
+                    "ROI": preview_df["ROI"].astype(str),
+                }
+            ).to_dict("records")
+
+    expected_profit = float(safe_value("expected_campaign_profit", safe_value("expected_profit", 0)) or 0)
+    expected_roi = float(safe_value("expected_campaign_roi", safe_value("expected_roi", 0)) or 0)
+    description = str(safe_value("offer_description", safe_value("campaign_description", "No campaign description available.")))
+    rollout_reason = str(safe_value("active_rollout_reason", "Rollout is based on active customer matches and guardrails."))
+
+    accent = {
         "Scale": "#16a34a",
         "Test": "#7c3aed",
-        "Constrain": "#f97316",
         "Controlled Servicing": "#0ea5e9",
+        "Constrain": "#f97316",
+        "Block / Protect": "#dc2626",
         "Do Not Launch": "#64748b",
-        "Block": "#dc2626",
-    }
+        "Review": "#2563eb",
+    }.get(rollout, "#2563eb")
 
-    accent = rollout_colors.get(rollout, "#2563eb")
+    button_style = {
+        "border": "none",
+        "borderRadius": "12px",
+        "padding": "11px 12px",
+        "fontSize": "13px",
+        "fontWeight": "900",
+        "color": "white",
+        "cursor": "pointer",
+        "boxShadow": "0 8px 18px rgba(15, 23, 42, 0.10)",
+    }
 
     return html.Div(
         children=[
             html.Div(
                 children=[
                     html.Div(
-                        f"#{int(row.get('rank', row.get('dashboard_recommendation_rank', 0)))}",
+                        f"#{campaign_key}",
                         style={
-                            "fontSize": "13px",
-                            "fontWeight": "900",
-                            "color": "white",
                             "backgroundColor": accent,
+                            "color": "white",
+                            "fontWeight": "900",
                             "borderRadius": "999px",
                             "padding": "6px 10px",
-                            "display": "inline-block",
+                            "fontSize": "12px",
                         },
                     ),
                     html.Div(
                         rollout,
                         style={
-                            "fontSize": "12px",
-                            "fontWeight": "800",
+                            "backgroundColor": "#f8fafc",
+                            "border": f"1px solid {accent}",
                             "color": accent,
-                            "backgroundColor": f"{accent}18",
-                            "border": f"1px solid {accent}33",
+                            "fontWeight": "900",
                             "borderRadius": "999px",
                             "padding": "6px 10px",
+                            "fontSize": "12px",
                         },
                     ),
                 ],
-                style={
-                    "display": "flex",
-                    "justifyContent": "space-between",
-                    "alignItems": "center",
-                    "marginBottom": "12px",
-                },
+                style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "14px"},
             ),
-            html.H3(
-                row.get("campaign_name", "Campaign"),
-                style={
-                    "fontSize": "18px",
-                    "fontWeight": "900",
-                    "margin": "0 0 6px 0",
-                    "color": COLORS["text"],
-                },
-            ),
-            html.Div(
-                row.get("campaign_family", "Campaign Family"),
-                style={
-                    "fontSize": "13px",
-                    "fontWeight": "700",
-                    "color": COLORS["muted"],
-                    "marginBottom": "12px",
-                },
-            ),
-            html.P(
-                row.get("business_goal", ""),
-                style={
-                    "fontSize": "13px",
-                    "lineHeight": "1.5",
-                    "color": COLORS["muted"],
-                    "margin": "0 0 10px 0",
-                },
-            ),
+            html.H3(campaign_name, style={"fontSize": "20px", "fontWeight": "900", "margin": "0 0 6px 0", "color": COLORS["text"]}),
+            html.Div(campaign_family, style={"fontWeight": "800", "color": COLORS["muted"], "marginBottom": "14px"}),
+            html.P(description, style={"fontSize": "14px", "lineHeight": "1.5", "color": COLORS["muted"], "margin": "0 0 14px 0"}),
+
             html.Div(
                 children=[
                     html.Strong("Active rollout logic: "),
-                    row.get("active_rollout_reason", "Rollout is inferred from the active master dataset."),
+                    rollout_reason,
                 ],
                 style={
-                    "fontSize": "12px",
-                    "lineHeight": "1.45",
-                    "color": "#1e3a8a",
                     "backgroundColor": "#eff6ff",
                     "border": "1px solid #bfdbfe",
-                    "borderRadius": "10px",
-                    "padding": "9px 10px",
+                    "borderRadius": "12px",
+                    "padding": "10px 12px",
+                    "fontSize": "13px",
+                    "lineHeight": "1.45",
+                    "color": "#1e3a8a",
                     "marginBottom": "14px",
                 },
             ),
+
             html.Div(
                 children=[
-                    create_metric_chip("Matches", format_large_number(row.get("eligible_customers", 0))),
-                    create_metric_chip("Scale Matches", format_large_number(row.get("scale_customers", 0))),
-                    create_metric_chip("Profit", format_currency(row.get("expected_campaign_profit", 0))),
-                    create_metric_chip("ROI", f"{row.get('expected_campaign_roi', 0):.2f}x"),
+                    create_metric_chip("Matches", f"{eligible_count:,}"),
+                    create_metric_chip("Scale / Test / Blocked", f"{scale_count:,} / {test_count:,} / {blocked_count:,}"),
+                    create_metric_chip("Profit", format_currency(expected_profit)),
+                    create_metric_chip("ROI", f"{expected_roi:.2f}x"),
+                ],
+                style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "10px", "marginBottom": "14px"},
+            ),
+
+            html.Div(
+                children=[
+                    html.Div(
+                        "Download matched customer audience",
+                        style={"fontWeight": "900", "fontSize": "13px", "marginBottom": "8px", "color": COLORS["text"]},
+                    ),
+                    html.Div(
+                        "Export includes campaign details, customer profile, risk band, decision status, ROI, profit, and audience status.",
+                        style={"fontSize": "12px", "lineHeight": "1.4", "color": COLORS["muted"], "marginBottom": "10px"},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Button(
+                                "Download CSV",
+                                id={"type": "campaign-audience-download-button", "campaign_key": campaign_key, "file_type": "csv"},
+                                n_clicks=0,
+                                style={**button_style, "backgroundColor": "#2563eb"},
+                            ),
+                            html.Button(
+                                "Download Excel",
+                                id={"type": "campaign-audience-download-button", "campaign_key": campaign_key, "file_type": "excel"},
+                                n_clicks=0,
+                                style={**button_style, "backgroundColor": "#16a34a"},
+                            ),
+                            dcc.Download(id={"type": "campaign-audience-download", "campaign_key": campaign_key, "file_type": "csv"}),
+                            dcc.Download(id={"type": "campaign-audience-download", "campaign_key": campaign_key, "file_type": "excel"}),
+                        ],
+                        style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "10px"},
+                    ),
                 ],
                 style={
-                    "display": "grid",
-                    "gridTemplateColumns": "1fr 1fr",
-                    "gap": "10px",
+                    "backgroundColor": "#f8fafc",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "14px",
+                    "padding": "12px",
+                    "marginBottom": "12px",
+                },
+            ),
+
+            html.Div(
+                children=[
+                    html.Strong("Audience preview: "),
+                    "Use the Campaign Audience Workbench below to filter matched customers and review a preview before downloading the full list.",
+                ],
+                style={
+                    "backgroundColor": "#f8fafc",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "14px",
+                    "padding": "12px",
+                    "fontSize": "12px",
+                    "lineHeight": "1.45",
+                    "color": COLORS["muted"],
                 },
             ),
         ],
@@ -990,9 +1142,9 @@ def create_campaign_recommendation_card(row: pd.Series) -> html.Div:
             "borderRadius": "18px",
             "padding": "18px",
             "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+            "height": "100%",
         },
     )
-
 
 def create_campaign_table_rows(campaign_recommendations: pd.DataFrame, limit: int = 10) -> list[dict]:
     if campaign_recommendations.empty:
@@ -1002,9 +1154,15 @@ def create_campaign_table_rows(campaign_recommendations: pd.DataFrame, limit: in
 
     table["Expected Profit"] = table["expected_campaign_profit"].apply(format_currency)
     table["Expected ROI"] = table["expected_campaign_roi"].apply(lambda value: f"{value:.2f}x")
-    table["Eligible Customers"] = table["eligible_customers"].apply(lambda value: f"{int(value):,}")
-    table["Scale Customers"] = table["scale_customers"].apply(lambda value: f"{int(value):,}")
-    table["Blocked Customers"] = table["blocked_customers"].apply(lambda value: f"{int(value):,}")
+    eligible = pd.to_numeric(table["eligible_customers"], errors="coerce").fillna(0).astype(int)
+    scale = pd.to_numeric(table["scale_customers"], errors="coerce").fillna(0).astype(int)
+    blocked = pd.to_numeric(table["blocked_customers"], errors="coerce").fillna(0).astype(int)
+    test = (eligible - scale - blocked).clip(lower=0).astype(int)
+
+    table["Eligible Customers"] = eligible.apply(lambda value: f"{int(value):,}")
+    table["Scale Customers"] = scale.apply(lambda value: f"{int(value):,}")
+    table["Test Customers"] = test.apply(lambda value: f"{int(value):,}")
+    table["Blocked Customers"] = blocked.apply(lambda value: f"{int(value):,}")
     table["Score"] = table["campaign_score"].apply(lambda value: f"{value:.1f}")
 
     return table[
@@ -1016,6 +1174,7 @@ def create_campaign_table_rows(campaign_recommendations: pd.DataFrame, limit: in
             "recommended_rollout_decision",
             "Eligible Customers",
             "Scale Customers",
+            "Test Customers",
             "Blocked Customers",
             "Expected Profit",
             "Expected ROI",
@@ -4165,6 +4324,145 @@ selected_tab_style = {
     "borderRadius": "12px",
 }
 
+
+
+
+def create_campaign_audience_workbench_shell() -> html.Div:
+    """Create one focused campaign audience preview/export workspace."""
+    control_style = {
+        "backgroundColor": "#f8fafc",
+        "border": f"1px solid {COLORS['border']}",
+        "borderRadius": "14px",
+        "padding": "14px",
+    }
+
+    return html.Div(
+        children=[
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.H3(
+                                "Campaign Audience Workbench",
+                                style={
+                                    "fontSize": "20px",
+                                    "fontWeight": "900",
+                                    "margin": "0 0 6px 0",
+                                    "color": COLORS["text"],
+                                },
+                            ),
+                            html.P(
+                                "Select one campaign, preview a small sample of matched customers, then export the full operational audience list. This avoids loading thousands or millions of customer rows inside every campaign card.",
+                                style={
+                                    "margin": 0,
+                                    "fontSize": "13px",
+                                    "color": COLORS["muted"],
+                                    "lineHeight": "1.45",
+                                },
+                            ),
+                        ],
+                    ),
+                ],
+                style={"marginBottom": "14px"},
+            ),
+
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Label("Campaign", style={"fontWeight": "900", "fontSize": "12px", "color": COLORS["muted"]}),
+                            dcc.Dropdown(
+                                id="campaign-audience-campaign-dropdown",
+                                options=[],
+                                value=None,
+                                clearable=False,
+                                placeholder="Select campaign",
+                                style={"marginTop": "6px"},
+                            ),
+                        ],
+                        style=control_style,
+                    ),
+                    html.Div(
+                        children=[
+                            html.Label("Audience filter", style={"fontWeight": "900", "fontSize": "12px", "color": COLORS["muted"]}),
+                            dcc.RadioItems(
+                                id="campaign-audience-status-filter",
+                                options=[
+                                    {"label": "All matched", "value": "all"},
+                                    {"label": "Scale", "value": "Scale"},
+                                    {"label": "Test", "value": "Test"},
+                                    {"label": "Blocked", "value": "Blocked"},
+                                ],
+                                value="all",
+                                inline=True,
+                                style={"marginTop": "10px", "fontSize": "13px", "fontWeight": "700"},
+                            ),
+                        ],
+                        style=control_style,
+                    ),
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "2fr 1fr",
+                    "gap": "12px",
+                    "marginBottom": "12px",
+                },
+            ),
+
+            html.Div(id="campaign-audience-summary", style={"marginBottom": "12px"}),
+
+            html.Div(
+                children=[
+                    html.Button(
+                        "Download Filtered CSV",
+                        id="campaign-audience-workbench-csv-button",
+                        n_clicks=0,
+                        style={
+                            "border": "none",
+                            "borderRadius": "12px",
+                            "padding": "12px 16px",
+                            "fontWeight": "900",
+                            "color": "white",
+                            "backgroundColor": "#2563eb",
+                            "cursor": "pointer",
+                        },
+                    ),
+                    html.Button(
+                        "Download Filtered Excel",
+                        id="campaign-audience-workbench-excel-button",
+                        n_clicks=0,
+                        style={
+                            "border": "none",
+                            "borderRadius": "12px",
+                            "padding": "12px 16px",
+                            "fontWeight": "900",
+                            "color": "white",
+                            "backgroundColor": "#16a34a",
+                            "cursor": "pointer",
+                        },
+                    ),
+                    dcc.Download(id="campaign-audience-workbench-csv-download"),
+                    dcc.Download(id="campaign-audience-workbench-excel-download"),
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "1fr 1fr",
+                    "gap": "10px",
+                    "marginBottom": "12px",
+                },
+            ),
+
+            html.Div(id="campaign-audience-preview-container"),
+        ],
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "20px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+        },
+    )
+
 app.layout = html.Div(
     children=[
         dcc.Store(id="active-customer-data-store", storage_type="memory"),
@@ -4452,7 +4750,7 @@ app.layout = html.Div(
                                             },
                                         ),
                                         html.P(
-                                            "Compact audit view of the top campaign opportunities. Matches can include servicing/protective audiences; Scale and Blocked columns show the active customer decision mix behind each campaign.",
+                                            "Compact audit view of the top campaign opportunities. Matches can include servicing/protective audiences; Scale, Test, and Blocked columns show the active customer decision mix behind each campaign.",
                                             style={
                                                 "margin": "0 0 14px 0",
                                                 "fontSize": "13px",
@@ -4477,6 +4775,11 @@ app.layout = html.Div(
                                 html.Div(
                                     id="campaign-detail-container",
                                     children=create_campaign_detail_panel(campaign_recommendations),
+                                    style={"marginTop": "18px"},
+                                ),
+                                html.Div(
+                                    id="campaign-audience-workbench-wrapper",
+                                    children=create_campaign_audience_workbench_shell(),
                                     style={"marginTop": "18px"},
                                 ),
                             ],
@@ -6995,7 +7298,7 @@ def update_campaigns_from_active_master(active_data):
             },
         )
     ] + [
-        create_campaign_recommendation_card(row)
+        create_campaign_recommendation_card(row, master_df)
         for _, row in top10.iterrows()
     ]
 
@@ -7010,15 +7313,404 @@ def update_campaigns_from_active_master(active_data):
         if "Eligible Customers" in row:
             row["Customer-Campaign Matches"] = row.pop("Eligible Customers")
         if "Scale Customers" in row:
-            row["Scale Matches"] = row.pop("Scale Customers")
+            row["Scale"] = row.pop("Scale Customers")
+        if "Test Customers" in row:
+            row["Test"] = row.pop("Test Customers")
         if "Blocked Customers" in row:
-            row["Blocked Matches"] = row.pop("Blocked Customers")
+            row["Blocked"] = row.pop("Blocked Customers")
         cleaned_table_rows.append(row)
 
     table = create_table(cleaned_table_rows)
     detail = create_campaign_detail_panel(top10)
 
     return kpis, family_fig, rollout_fig, profit_fig, top_cards, table, detail
+
+
+
+def parse_campaign_export_id_set(value) -> set[str]:
+    """Parse campaign customer id strings into a set."""
+    if value is None:
+        return set()
+    try:
+        if pd.isna(value):
+            return set()
+    except Exception:
+        pass
+
+    raw = str(value).replace(",", ";")
+    return {item.strip() for item in raw.split(";") if item.strip()}
+
+
+def build_campaign_audience_export_by_key(active_data, campaign_key: str) -> pd.DataFrame:
+    """Build a customer-level export for the selected campaign card."""
+    master_df = get_active_customer_features(active_data)
+
+    if master_df.empty or "customer_id" not in master_df.columns:
+        return pd.DataFrame()
+
+    active_campaigns = build_active_campaign_recommendations(master_df)
+
+    if active_campaigns.empty:
+        return pd.DataFrame()
+
+    working = active_campaigns.copy()
+
+    if "rank" not in working.columns:
+        working["rank"] = range(1, len(working) + 1)
+
+    selected = working[working["rank"].astype(str).eq(str(campaign_key))].copy()
+
+    if selected.empty and "dashboard_recommendation_rank" in working.columns:
+        selected = working[working["dashboard_recommendation_rank"].astype(str).eq(str(campaign_key))].copy()
+
+    if selected.empty and "campaign_name" in working.columns:
+        selected = working[working["campaign_name"].astype(str).eq(str(campaign_key))].copy()
+
+    if selected.empty:
+        return pd.DataFrame()
+
+    campaign = selected.iloc[0].to_dict()
+
+    eligible_ids = parse_campaign_export_id_set(campaign.get("eligible_customer_ids"))
+    scale_ids = parse_campaign_export_id_set(campaign.get("scale_customer_ids"))
+    blocked_ids = parse_campaign_export_id_set(campaign.get("blocked_customer_ids"))
+
+    if eligible_ids:
+        export_df = master_df[master_df["customer_id"].astype(str).isin(eligible_ids)].copy()
+    else:
+        export_df = master_df.copy()
+
+    if export_df.empty:
+        return pd.DataFrame()
+
+    def audience_status(customer_id, decision_status):
+        customer_id = str(customer_id)
+        if customer_id in blocked_ids:
+            return "Blocked"
+        if customer_id in scale_ids:
+            return "Scale"
+        if str(decision_status) == "Block":
+            return "Blocked"
+        if str(decision_status) == "Scale":
+            return "Scale"
+        if str(decision_status) == "Test":
+            return "Test"
+        return "Eligible"
+
+    decision_values = export_df["decision_status"] if "decision_status" in export_df.columns else pd.Series([""] * len(export_df))
+
+    export_df.insert(
+        0,
+        "campaign_audience_status",
+        [
+            audience_status(customer_id, decision_status)
+            for customer_id, decision_status in zip(export_df["customer_id"], decision_values)
+        ],
+    )
+    export_df.insert(0, "campaign_rollout", campaign.get("recommended_rollout_decision", "Review"))
+    export_df.insert(0, "campaign_family", campaign.get("campaign_family", "Unknown family"))
+    export_df.insert(0, "campaign_name", campaign.get("campaign_name", "Unknown campaign"))
+
+    preferred_columns = [
+        "campaign_name",
+        "campaign_family",
+        "campaign_rollout",
+        "campaign_audience_status",
+        "customer_id",
+        "customer_name",
+        "customer_email",
+        "phone_number",
+        "city",
+        "state",
+        "customer_segment",
+        "risk_band",
+        "decision_status",
+        "recommended_action",
+        "treatment_type",
+        "offer_type",
+        "card_type",
+        "rewards_preference",
+        "credit_score",
+        "utilization_rate",
+        "default_probability",
+        "monthly_spend",
+        "risk_adjusted_profit",
+        "expected_roi",
+        "current_balance",
+        "credit_limit",
+        "late_payments_12m",
+        "transactions_count",
+    ]
+
+    ordered_columns = [column for column in preferred_columns if column in export_df.columns]
+    remaining_columns = [column for column in export_df.columns if column not in ordered_columns]
+
+    return export_df[ordered_columns + remaining_columns]
+
+
+@app.callback(
+    Output({"type": "campaign-audience-download", "campaign_key": MATCH, "file_type": MATCH}, "data"),
+    Input({"type": "campaign-audience-download-button", "campaign_key": MATCH, "file_type": MATCH}, "n_clicks"),
+    State("active-customer-data-store", "data"),
+    prevent_initial_call=True,
+)
+def download_campaign_audience_from_card(n_clicks, active_data):
+    if not n_clicks:
+        raise PreventUpdate
+
+    triggered_id = callback_context.triggered_id or {}
+    campaign_key = triggered_id.get("campaign_key")
+    file_type = triggered_id.get("file_type", "csv")
+
+    export_df = build_campaign_audience_export_by_key(active_data, campaign_key)
+
+    if export_df.empty:
+        raise PreventUpdate
+
+    campaign_name = str(export_df["campaign_name"].iloc[0]).lower()
+    safe_campaign_name = "".join(ch if ch.isalnum() else "_" for ch in campaign_name).strip("_")
+
+    if file_type == "excel":
+        def write_campaign_audience_excel(bytes_io):
+            with pd.ExcelWriter(bytes_io, engine="openpyxl") as writer:
+                export_df.to_excel(writer, sheet_name="Campaign Audience", index=False)
+
+        return dcc.send_bytes(
+            write_campaign_audience_excel,
+            f"campaign_{safe_campaign_name}_matched_customers.xlsx",
+        )
+
+    return dcc.send_data_frame(
+        export_df.to_csv,
+        f"campaign_{safe_campaign_name}_matched_customers.csv",
+        index=False,
+    )
+
+
+
+def filter_campaign_audience_export(export_df: pd.DataFrame, audience_filter: str) -> pd.DataFrame:
+    """Filter campaign audience export by audience status."""
+    if export_df.empty:
+        return export_df
+
+    if audience_filter in [None, "all"]:
+        return export_df.copy()
+
+    if "campaign_audience_status" not in export_df.columns:
+        return export_df.copy()
+
+    return export_df[export_df["campaign_audience_status"].astype(str).eq(str(audience_filter))].copy()
+
+
+def format_campaign_audience_preview(export_df: pd.DataFrame, max_rows: int = 25) -> list[dict]:
+    """Build compact preview rows for the workbench."""
+    if export_df.empty:
+        return []
+
+    preview_df = export_df.head(max_rows).copy()
+
+    def money_col(column):
+        if column in preview_df.columns:
+            return pd.to_numeric(preview_df[column], errors="coerce").fillna(0).apply(lambda value: f"${value:,.0f}")
+        return ""
+
+    def roi_col(column):
+        if column in preview_df.columns:
+            return pd.to_numeric(preview_df[column], errors="coerce").fillna(0).apply(lambda value: f"{value:.2f}x")
+        return ""
+
+    result = pd.DataFrame(
+        {
+            "Customer ID": preview_df["customer_id"].astype(str) if "customer_id" in preview_df.columns else "",
+            "Segment": preview_df["customer_segment"].astype(str) if "customer_segment" in preview_df.columns else "",
+            "Risk": preview_df["risk_band"].astype(str) if "risk_band" in preview_df.columns else "",
+            "Decision": preview_df["decision_status"].astype(str) if "decision_status" in preview_df.columns else "",
+            "Audience": preview_df["campaign_audience_status"].astype(str) if "campaign_audience_status" in preview_df.columns else "",
+            "Monthly Spend": money_col("monthly_spend"),
+            "Profit": money_col("risk_adjusted_profit"),
+            "ROI": roi_col("expected_roi"),
+        }
+    )
+
+    return result.to_dict("records")
+
+
+@app.callback(
+    Output("campaign-audience-campaign-dropdown", "options"),
+    Output("campaign-audience-campaign-dropdown", "value"),
+    Input("active-customer-data-store", "data"),
+)
+def update_campaign_audience_dropdown(active_data):
+    master_df = get_active_customer_features(active_data)
+    active_campaigns = build_active_campaign_recommendations(master_df)
+
+    if active_campaigns.empty:
+        return [], None
+
+    top_campaigns = active_campaigns.head(25).copy()
+
+    options = []
+    for _, campaign in top_campaigns.iterrows():
+        rank = str(campaign.get("rank", campaign.get("dashboard_recommendation_rank", "")))
+        campaign_name = str(campaign.get("campaign_name", "Unknown campaign"))
+        family = str(campaign.get("campaign_family", "Unknown family"))
+        rollout = str(campaign.get("recommended_rollout_decision", "Review"))
+        matches = int(pd.to_numeric(pd.Series([campaign.get("eligible_customers", 0)]), errors="coerce").fillna(0).iloc[0])
+
+        options.append(
+            {
+                "label": f"#{rank} {campaign_name} — {family} — {rollout} — {matches:,} matches",
+                "value": rank,
+            }
+        )
+
+    default_value = options[0]["value"] if options else None
+    return options, default_value
+
+
+@app.callback(
+    Output("campaign-audience-summary", "children"),
+    Output("campaign-audience-preview-container", "children"),
+    Input("active-customer-data-store", "data"),
+    Input("campaign-audience-campaign-dropdown", "value"),
+    Input("campaign-audience-status-filter", "value"),
+)
+def update_campaign_audience_preview(active_data, campaign_key, audience_filter):
+    if not campaign_key:
+        return create_zero_state_card(
+            "No campaign selected",
+            "Select a campaign to preview matched customers.",
+            "Upload a customer file or use the synthetic dataset to generate campaign audiences.",
+        ), html.Div()
+
+    export_df = build_campaign_audience_export_by_key(active_data, campaign_key)
+
+    if export_df.empty:
+        return create_zero_state_card(
+            "No matched customers",
+            "This campaign does not have a matched customer audience in the active dataset.",
+            "Try another campaign or upload a broader customer file.",
+        ), html.Div()
+
+    filtered_df = filter_campaign_audience_export(export_df, audience_filter)
+    preview_rows = format_campaign_audience_preview(filtered_df, max_rows=25)
+
+    total_count = len(export_df)
+    filtered_count = len(filtered_df)
+    shown_count = len(preview_rows)
+
+    audience_label = "All matched" if audience_filter in [None, "all"] else str(audience_filter)
+
+    summary = html.Div(
+        children=[
+            create_metric_chip("Campaign", str(export_df["campaign_name"].iloc[0]) if "campaign_name" in export_df.columns else "Selected campaign"),
+            create_metric_chip("Audience Filter", audience_label),
+            create_metric_chip("Filtered Customers", f"{filtered_count:,}"),
+            create_metric_chip("Total Matched", f"{total_count:,}"),
+        ],
+        style={
+            "display": "grid",
+            "gridTemplateColumns": "repeat(4, minmax(0, 1fr))",
+            "gap": "10px",
+        },
+    )
+
+    if not preview_rows:
+        preview = create_zero_state_card(
+            "No customers in this filter",
+            f"The selected campaign has no customers in the {audience_label} audience filter.",
+            "Try All matched, Scale, Test, or Blocked.",
+        )
+    else:
+        preview = html.Div(
+            children=[
+                html.Div(
+                    children=[
+                        html.Strong(f"Previewing {shown_count:,} of {filtered_count:,} filtered customers. "),
+                        "The preview is intentionally capped for performance; use the downloads for the full operational list.",
+                    ],
+                    style={
+                        "backgroundColor": "#eff6ff",
+                        "border": "1px solid #bfdbfe",
+                        "borderRadius": "14px",
+                        "padding": "12px 14px",
+                        "color": "#1e3a8a",
+                        "fontSize": "13px",
+                        "lineHeight": "1.45",
+                        "marginBottom": "12px",
+                    },
+                ),
+                html.Div(create_table(preview_rows), style={"overflowX": "auto"}),
+                html.Div(
+                    "Customer 360 handoff: copy any Customer ID from this preview and review the full profile in the Customer 360 / Audience Explorer area.",
+                    style={
+                        "fontSize": "12px",
+                        "color": COLORS["muted"],
+                        "marginTop": "10px",
+                        "lineHeight": "1.4",
+                    },
+                ),
+            ]
+        )
+
+    return summary, preview
+
+
+def send_workbench_campaign_audience(active_data, campaign_key, audience_filter, file_type: str):
+    export_df = build_campaign_audience_export_by_key(active_data, campaign_key)
+
+    if export_df.empty:
+        raise PreventUpdate
+
+    filtered_df = filter_campaign_audience_export(export_df, audience_filter)
+
+    if filtered_df.empty:
+        raise PreventUpdate
+
+    campaign_name = str(filtered_df["campaign_name"].iloc[0]).lower() if "campaign_name" in filtered_df.columns else "campaign"
+    safe_campaign_name = "".join(ch if ch.isalnum() else "_" for ch in campaign_name).strip("_")
+    safe_filter = str(audience_filter or "all").lower().replace(" ", "_")
+
+    if file_type == "excel":
+        def write_excel(bytes_io):
+            with pd.ExcelWriter(bytes_io, engine="openpyxl") as writer:
+                filtered_df.to_excel(writer, sheet_name="Campaign Audience", index=False)
+
+        return dcc.send_bytes(write_excel, f"campaign_{safe_campaign_name}_{safe_filter}_customers.xlsx")
+
+    return dcc.send_data_frame(
+        filtered_df.to_csv,
+        f"campaign_{safe_campaign_name}_{safe_filter}_customers.csv",
+        index=False,
+    )
+
+
+@app.callback(
+    Output("campaign-audience-workbench-csv-download", "data"),
+    Input("campaign-audience-workbench-csv-button", "n_clicks"),
+    State("active-customer-data-store", "data"),
+    State("campaign-audience-campaign-dropdown", "value"),
+    State("campaign-audience-status-filter", "value"),
+    prevent_initial_call=True,
+)
+def download_workbench_campaign_audience_csv(n_clicks, active_data, campaign_key, audience_filter):
+    if not n_clicks:
+        raise PreventUpdate
+    return send_workbench_campaign_audience(active_data, campaign_key, audience_filter, "csv")
+
+
+@app.callback(
+    Output("campaign-audience-workbench-excel-download", "data"),
+    Input("campaign-audience-workbench-excel-button", "n_clicks"),
+    State("active-customer-data-store", "data"),
+    State("campaign-audience-campaign-dropdown", "value"),
+    State("campaign-audience-status-filter", "value"),
+    prevent_initial_call=True,
+)
+def download_workbench_campaign_audience_excel(n_clicks, active_data, campaign_key, audience_filter):
+    if not n_clicks:
+        raise PreventUpdate
+    return send_workbench_campaign_audience(active_data, campaign_key, audience_filter, "excel")
 
 
 
