@@ -4474,27 +4474,38 @@ app.layout = html.Div(
                         create_compact_governance_panel(),
                         create_guardrails_action_panel(),
                         html.Div(
-                            children=[
-                                create_kpi_card("Total Blocked Customers", f"{total_blocked:,}", "Blocked from growth campaigns", "#dc2626"),
-                                create_kpi_card("Risk Watch Block Check", f"{risk_watch_blocked:,} / {risk_watch_count:,}", "Risk Watch customers blocked", "#f97316"),
-                                create_kpi_card("High-Utilization Scaled", f"{high_utilization_scaled:,}", "Should remain zero", "#16a34a"),
-                            ],
-                            style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "16px", "marginTop": "22px", "marginBottom": "18px"},
+                            id="guardrails-kpi-container",
+                            children=[],
+                            style={"display": "grid", "gridTemplateColumns": "repeat(5, 1fr)", "gap": "16px", "marginTop": "22px", "marginBottom": "18px"},
+                        ),
+                        html.Div(
+                            id="guardrails-interpretation-container",
+                            children=create_insight_card(
+                                "Guardrail Interpretation",
+                                "This section will refresh from the active master dataset and explain whether any customers fail risk rules.",
+                                variant="warning",
+                            ),
+                            style={"marginBottom": "18px"},
+                        ),
+                        html.Div(
+                            id="guardrails-rule-review-container",
+                            children=[],
+                            style={"marginBottom": "18px"},
+                        ),
+                        html.Div(
+                            id="guardrails-customer-review-container",
+                            children=[],
+                            style={"marginBottom": "18px"},
                         ),
                         html.Div(
                             children=[
                                 create_chart_card("Risk Band Distribution", "Portfolio split by estimated risk band.", risk_fig, "guardrail-risk-chart"),
-                                create_chart_card("High-Utilization Revolver Mix", "Decision mix for customers who may need extra guardrails.", high_utilization_fig, "guardrail-high-util-chart"),
+                                create_chart_card("High Utilization Watchlist", "Decision mix for customers whose utilization rate suggests extra review.", high_utilization_fig, "guardrail-high-util-chart"),
                             ],
                             style={"display": "grid", "gridTemplateColumns": "0.9fr 1.1fr", "gap": "18px"},
                         ),
                         html.Div(style={"height": "18px"}),
                         create_chart_card("Blocked Customers by Segment", "Where risk guardrails are triggered.", block_segment_fig, "guardrail-blocked-segment-chart"),
-                        create_insight_card(
-                            "Guardrail Interpretation",
-                            "This section separates revenue potential from responsible growth. Some customers may generate interest income, but that does not mean they should receive aggressive spend or upgrade offers.",
-                            variant="warning",
-                        ),
                     ],
                 ),
             ],
@@ -4531,14 +4542,14 @@ app.layout = html.Div(
 
 def get_active_view_label(selected_segments, selected_decisions, selected_risks, selected_actions) -> str:
     has_filters = any([selected_segments, selected_decisions, selected_risks, selected_actions])
-    return "Filtered View" if has_filters else "Full Portfolio View"
+    return "Filtered View" if has_filters else "Active Portfolio View"
 
 
 def apply_view_label_to_figure(fig, view_label: str):
     current_title = fig.layout.title.text if fig.layout.title.text else "Chart"
 
     # Avoid stacking labels if callback fires multiple times
-    current_title = current_title.replace(" — Filtered View", "").replace(" — Full Portfolio View", "")
+    current_title = current_title.replace(" — Filtered View", "").replace(" — Full Portfolio View", "").replace(" — Active Portfolio View", "")
 
     fig.update_layout(
         title=f"{current_title} — {view_label}"
@@ -5162,18 +5173,22 @@ def update_filtered_charts(selected_segments, selected_decisions, selected_risks
         return polish(fig, "Risk Band Distribution")
 
     def high_utilization_figure(df):
-        if df.empty or "customer_segment" not in df.columns:
-            return master_empty_figure("High-Utilization Revolver Decisions")
+        if df.empty or "utilization_rate" not in df.columns:
+            return master_empty_figure(
+                "High Utilization Watchlist",
+                "No utilization values available in this active view.",
+            )
 
-        high_util_df = df[df["customer_segment"] == "High-Utilization Revolver"].copy()
+        util = pd.to_numeric(df["utilization_rate"], errors="coerce").fillna(0)
+        high_util_df = df[util >= 0.70].copy()
 
         if high_util_df.empty:
             return master_empty_figure(
-                "High-Utilization Revolver Decisions",
-                "No High-Utilization Revolver customers in this active view.",
+                "High Utilization Watchlist",
+                "No customers in this active view have utilization at or above 70%.",
             )
 
-        return decision_count_figure(high_util_df).update_layout(title="High-Utilization Revolver Decisions")
+        return decision_count_figure(high_util_df).update_layout(title="High Utilization Watchlist Decisions")
 
     def blocked_segment_figure(df):
         if df.empty or "decision_status" not in df.columns:
@@ -7363,6 +7378,360 @@ def update_strategy_playbook_from_active_master(active_data):
     playbook_table = render_strategy_playbook_table(strategy_df)
 
     return executive_panel, risk_return_fig, playbook_table
+
+
+
+
+def build_active_guardrail_review(master_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Create customer-level and rule-level guardrail review from active master data."""
+    if master_df is None or master_df.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    df = master_df.copy()
+
+    numeric_defaults = {
+        "default_probability": 0,
+        "utilization_rate": 0,
+        "credit_score": 999,
+        "late_payments_12m": 0,
+        "risk_adjusted_profit": 0,
+    }
+
+    for column, default in numeric_defaults.items():
+        if column not in df.columns:
+            df[column] = default
+        df[column] = pd.to_numeric(df[column], errors="coerce").fillna(default)
+
+    if "decision_status" not in df.columns:
+        df["decision_status"] = "Unknown"
+
+    if "risk_guardrail_flag" in df.columns:
+        risk_guardrail_series = df["risk_guardrail_flag"]
+        if risk_guardrail_series.dtype == bool:
+            df["rule_engine_guardrail_flag"] = risk_guardrail_series
+        else:
+            df["rule_engine_guardrail_flag"] = risk_guardrail_series.astype(str).str.lower().isin(["true", "1", "yes", "y"])
+    else:
+        df["rule_engine_guardrail_flag"] = False
+
+    df["rule_block_decision"] = df["decision_status"].astype(str).eq("Block")
+    df["rule_high_default_probability"] = df["default_probability"] >= 0.08
+    df["rule_high_utilization"] = df["utilization_rate"] >= 0.70
+    df["rule_low_credit_score"] = df["credit_score"] < 600
+    df["rule_late_payment_risk"] = df["late_payments_12m"] >= 2
+    df["rule_negative_profit"] = df["risk_adjusted_profit"] <= 0
+
+    df["hard_guardrail_fail"] = (
+        df["rule_block_decision"]
+        | df["rule_engine_guardrail_flag"]
+        | df["rule_high_default_probability"]
+        | (df["rule_low_credit_score"] & df["rule_high_utilization"])
+        | (df["rule_late_payment_risk"] & df["rule_high_utilization"])
+    )
+
+    df["review_guardrail_flag"] = (
+        df["rule_high_utilization"]
+        | df["rule_low_credit_score"]
+        | df["rule_late_payment_risk"]
+        | df["rule_negative_profit"]
+        | df["rule_high_default_probability"]
+    )
+
+    rule_specs = [
+        {
+            "Rule": "Block decision",
+            "Threshold": "decision_status = Block",
+            "Column": "rule_block_decision",
+            "Severity": "Hard stop",
+        },
+        {
+            "Rule": "Engine guardrail flag",
+            "Threshold": "risk_guardrail_flag = true",
+            "Column": "rule_engine_guardrail_flag",
+            "Severity": "Hard stop",
+        },
+        {
+            "Rule": "High default probability",
+            "Threshold": "default_probability >= 8%",
+            "Column": "rule_high_default_probability",
+            "Severity": "Hard stop",
+        },
+        {
+            "Rule": "High utilization watchlist",
+            "Threshold": "utilization_rate >= 70%",
+            "Column": "rule_high_utilization",
+            "Severity": "Review",
+        },
+        {
+            "Rule": "Low credit score",
+            "Threshold": "credit_score < 600",
+            "Column": "rule_low_credit_score",
+            "Severity": "Review",
+        },
+        {
+            "Rule": "Late payment risk",
+            "Threshold": "late_payments_12m >= 2",
+            "Column": "rule_late_payment_risk",
+            "Severity": "Review",
+        },
+        {
+            "Rule": "Negative risk-adjusted profit",
+            "Threshold": "risk_adjusted_profit <= 0",
+            "Column": "rule_negative_profit",
+            "Severity": "Review",
+        },
+    ]
+
+    total_customers = max(len(df), 1)
+    rule_rows = []
+
+    for rule in rule_specs:
+        flagged = int(df[rule["Column"]].sum()) if rule["Column"] in df.columns else 0
+        share = flagged / total_customers
+        status = "Clear" if flagged == 0 else ("Stop" if rule["Severity"] == "Hard stop" else "Review")
+
+        rule_rows.append(
+            {
+                "Rule": rule["Rule"],
+                "Threshold": rule["Threshold"],
+                "Severity": rule["Severity"],
+                "Customers Flagged": f"{flagged:,}",
+                "Share": format_percent(share),
+                "Status": status,
+            }
+        )
+
+    rule_df = pd.DataFrame(rule_rows)
+
+    return df, rule_df
+
+
+def render_guardrail_rule_cards(rule_df: pd.DataFrame):
+    if rule_df is None or rule_df.empty:
+        return create_zero_state_card(
+            "No guardrail rules available",
+            "The active dataset could not be evaluated against risk rules.",
+            "Check whether the uploaded file contains the required risk and decision columns.",
+        )
+
+    status_colors = {
+        "Clear": "#16a34a",
+        "Review": "#f97316",
+        "Stop": "#dc2626",
+    }
+
+    cards = []
+
+    for _, row in rule_df.iterrows():
+        accent = status_colors.get(row["Status"], "#64748b")
+        cards.append(
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div(row["Rule"], style={"fontWeight": "900", "fontSize": "14px", "color": COLORS["text"]}),
+                            html.Div(
+                                row["Status"],
+                                style={
+                                    "fontSize": "11px",
+                                    "fontWeight": "900",
+                                    "color": "white",
+                                    "backgroundColor": accent,
+                                    "borderRadius": "999px",
+                                    "padding": "5px 9px",
+                                },
+                            ),
+                        ],
+                        style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "gap": "10px"},
+                    ),
+                    html.Div(row["Threshold"], style={"fontSize": "12px", "color": COLORS["muted"], "marginTop": "8px", "lineHeight": "1.35"}),
+                    html.Div(
+                        children=[
+                            create_metric_chip("Flagged", row["Customers Flagged"]),
+                            create_metric_chip("Share", row["Share"]),
+                            create_metric_chip("Severity", row["Severity"]),
+                        ],
+                        style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "8px", "marginTop": "12px"},
+                    ),
+                ],
+                style={
+                    "backgroundColor": "#ffffff",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderTop": f"4px solid {accent}",
+                    "borderRadius": "14px",
+                    "padding": "14px",
+                    "boxShadow": "0 6px 16px rgba(15, 23, 42, 0.05)",
+                },
+            )
+        )
+
+    return html.Div(
+        children=[
+            html.H3("Active Guardrail Rule Checklist", style={"margin": "0 0 12px 0", "fontSize": "20px", "fontWeight": "900"}),
+            html.Div(
+                cards,
+                style={"display": "grid", "gridTemplateColumns": "repeat(auto-fit, minmax(260px, 1fr))", "gap": "12px"},
+            ),
+        ],
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "20px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+        },
+    )
+
+
+def render_guardrail_customer_review(review_df: pd.DataFrame):
+    if review_df is None or review_df.empty:
+        return html.Div(
+            children=[
+                html.H3(
+                    "No active customers failed hard guardrails",
+                    style={"margin": "0 0 8px 0", "fontSize": "20px", "fontWeight": "900", "color": "#166534"},
+                ),
+                html.P(
+                    "No customer in the active master dataset is currently blocked or failing hard risk rules.",
+                    style={"margin": "0 0 8px 0", "color": "#166534", "lineHeight": "1.45"},
+                ),
+                html.P(
+                    "Continue to monitor high utilization, late payment risk, and low credit scores before campaign launch.",
+                    style={"margin": "0", "color": "#166534", "lineHeight": "1.45"},
+                ),
+            ],
+            style={
+                "backgroundColor": "#f0fdf4",
+                "border": "1px solid #bbf7d0",
+                "borderLeft": "5px solid #16a34a",
+                "borderRadius": "14px",
+                "padding": "16px",
+            },
+        )
+
+    display_df = review_df.copy()
+
+    rename_map = {
+        "customer_id": "Customer ID",
+        "customer_name": "Name",
+        "customer_segment": "Segment",
+        "decision_status": "Decision",
+        "risk_band": "Risk Band",
+        "credit_score": "Credit Score",
+        "utilization_rate": "Utilization",
+        "default_probability": "Default Probability",
+        "late_payments_12m": "Late Payments 12M",
+        "risk_adjusted_profit": "Risk-Adjusted Profit",
+    }
+
+    display_df = display_df.rename(columns=rename_map)
+
+    for column in ["Utilization", "Default Probability"]:
+        if column in display_df.columns:
+            display_df[column] = pd.to_numeric(display_df[column], errors="coerce").fillna(0).apply(lambda value: f"{value:.1%}")
+
+    if "Risk-Adjusted Profit" in display_df.columns:
+        display_df["Risk-Adjusted Profit"] = pd.to_numeric(display_df["Risk-Adjusted Profit"], errors="coerce").fillna(0).apply(format_currency)
+
+    columns = [
+        "Customer ID",
+        "Name",
+        "Segment",
+        "Decision",
+        "Risk Band",
+        "Credit Score",
+        "Utilization",
+        "Default Probability",
+        "Late Payments 12M",
+        "Risk-Adjusted Profit",
+    ]
+
+    columns = [column for column in columns if column in display_df.columns]
+
+    rows = display_df[columns].head(25).to_dict("records")
+
+    return html.Div(
+        children=[
+            html.H3("Customers Requiring Guardrail Review", style={"margin": "0 0 10px 0", "fontSize": "20px", "fontWeight": "900"}),
+            html.P(
+                "This table shows customers who are blocked or flagged by active risk rules. Use Audience Explorer for export and deeper review.",
+                style={"color": COLORS["muted"], "margin": "0 0 14px 0", "lineHeight": "1.45"},
+            ),
+            create_table(rows),
+        ],
+        style={
+            "backgroundColor": COLORS["card"],
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "18px",
+            "padding": "20px",
+            "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+            "overflowX": "auto",
+        },
+    )
+
+
+@app.callback(
+    Output("guardrails-kpi-container", "children"),
+    Output("guardrails-rule-review-container", "children"),
+    Output("guardrails-customer-review-container", "children"),
+    Output("guardrails-interpretation-container", "children"),
+    Input("active-customer-data-store", "data"),
+)
+def update_guardrails_from_active_master(active_data):
+    master_df = get_active_customer_features(active_data)
+    review_df, rule_df = build_active_guardrail_review(master_df)
+
+    total_customers = int(len(review_df))
+    blocked_count = int(review_df["rule_block_decision"].sum()) if "rule_block_decision" in review_df.columns else 0
+    hard_fail_count = int(review_df["hard_guardrail_fail"].sum()) if "hard_guardrail_fail" in review_df.columns else 0
+    review_count = int(review_df["review_guardrail_flag"].sum()) if "review_guardrail_flag" in review_df.columns else 0
+    high_util_count = int(review_df["rule_high_utilization"].sum()) if "rule_high_utilization" in review_df.columns else 0
+
+    block_rate = blocked_count / total_customers if total_customers else 0
+    hard_fail_rate = hard_fail_count / total_customers if total_customers else 0
+
+    kpis = [
+        create_kpi_card("Active Customers", f"{total_customers:,}", "Customers in active master dataset", "#2563eb"),
+        create_kpi_card("Blocked Customers", f"{blocked_count:,}", f"{format_percent(block_rate)} of active customers", "#dc2626"),
+        create_kpi_card("Hard Rule Fails", f"{hard_fail_count:,}", f"{format_percent(hard_fail_rate)} fail stop rules", "#f97316"),
+        create_kpi_card("Review Watchlist", f"{review_count:,}", "Customers flagged by review rules", "#7c3aed"),
+        create_kpi_card("High Utilization", f"{high_util_count:,}", "Utilization at or above 70%", "#0ea5e9"),
+    ]
+
+    rule_cards = render_guardrail_rule_cards(rule_df)
+
+    customer_review_df = review_df[
+        (review_df["hard_guardrail_fail"]) | (review_df["review_guardrail_flag"])
+    ].copy() if not review_df.empty else pd.DataFrame()
+
+    customer_review = render_guardrail_customer_review(customer_review_df)
+
+    if total_customers == 0:
+        interpretation = create_insight_card(
+            "Guardrail Interpretation",
+            "No active customers are available for guardrail review.",
+            variant="warning",
+        )
+    elif hard_fail_count == 0 and review_count == 0:
+        interpretation = create_insight_card(
+            "Guardrail Interpretation",
+            "No active customers failed hard stop rules or review watchlist rules. The current active portfolio is clean from a guardrail perspective, but campaign launches should still be reviewed before execution.",
+            variant="success",
+        )
+    elif hard_fail_count == 0:
+        interpretation = create_insight_card(
+            "Guardrail Interpretation",
+            f"No active customers failed hard stop rules, but {review_count:,} customer(s) are on the review watchlist. Use controlled testing or manual review before scaling offers.",
+            variant="warning",
+        )
+    else:
+        interpretation = create_insight_card(
+            "Guardrail Interpretation",
+            f"{hard_fail_count:,} active customer(s) failed hard stop rules. These customers should not receive aggressive growth offers until risk conditions improve.",
+            variant="warning",
+        )
+
+    return kpis, rule_cards, customer_review, interpretation
 
 
 
