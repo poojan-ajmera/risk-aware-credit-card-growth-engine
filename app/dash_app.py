@@ -2365,7 +2365,7 @@ def create_data_source_center() -> html.Details:
                                 style={"margin": "0", "color": COLORS["muted"], "lineHeight": "1.5"},
                             ),
                         ],
-                        title="Current mode uses synthetic data. Later, uploaded CSV or Excel files will replace this active dataset.",
+                        title="Current mode shows whether the dashboard is using the synthetic demo portfolio or an uploaded customer file as the active master dataset.",
                         style={
                             "backgroundColor": "#eff6ff",
                             "border": "1px solid #bfdbfe",
@@ -2523,7 +2523,7 @@ def create_data_source_center() -> html.Details:
             html.Div(
                 children=[
                     html.Strong("Active master data: "),
-                    "uploaded files are validated, scored through the decision engine, and stored as the active master dataset. Core dashboard views now refresh from this active dataset; campaign-level modules are being checked for final consistency.",
+                    "uploaded files are validated, scored through the decision engine, and stored as the active master dataset. Dashboard views, campaign recommendations, workbench tools, and strategy playbook now refresh from this active dataset.",
                 ],
                 title="This explains how uploaded files are used as the active dashboard dataset.",
                 style={
@@ -4287,7 +4287,7 @@ app.layout = html.Div(
                         ),
                         create_insight_card(
                             "Segment-Level Takeaway",
-                            "Core Customer and Loyal High-Value Customer are the strongest broad-scale opportunities. High-Utilization Revolvers may show financial value, but should remain a controlled test and guardrail segment.",
+                            "Use the priority table above to decide which active segments should scale, test, or remain under guardrail review. Uploaded files may change this takeaway based on the active portfolio.",
                         ),
                     ],
                 ),
@@ -6072,6 +6072,7 @@ def update_customer_explorer(
     State("customer-explorer-card-type", "value"),
     State("customer-explorer-campaign", "value"),
     State("customer-explorer-audience-type", "value"),
+    State("active-customer-data-store", "data"),
     prevent_initial_call=True,
 )
 def download_customer_explorer_csv(
@@ -6084,9 +6085,12 @@ def download_customer_explorer_csv(
     card_type,
     campaign_id,
     audience_type,
+    active_data,
 ):
     if not n_clicks:
         raise PreventUpdate
+
+    master_df = get_active_customer_features(active_data)
 
     explorer_df = build_customer_explorer_dataframe(
         search_text,
@@ -6097,6 +6101,7 @@ def download_customer_explorer_csv(
         card_type,
         campaign_id,
         audience_type,
+        source_df=master_df,
     )
 
     if explorer_df.empty:
@@ -6118,6 +6123,7 @@ def download_customer_explorer_csv(
     State("customer-explorer-card-type", "value"),
     State("customer-explorer-campaign", "value"),
     State("customer-explorer-audience-type", "value"),
+    State("active-customer-data-store", "data"),
     prevent_initial_call=True,
 )
 def download_customer_explorer_excel(
@@ -6130,9 +6136,12 @@ def download_customer_explorer_excel(
     card_type,
     campaign_id,
     audience_type,
+    active_data,
 ):
     if not n_clicks:
         raise PreventUpdate
+
+    master_df = get_active_customer_features(active_data)
 
     explorer_df = build_customer_explorer_dataframe(
         search_text,
@@ -6143,6 +6152,7 @@ def download_customer_explorer_excel(
         card_type,
         campaign_id,
         audience_type,
+        source_df=master_df,
     )
 
     if explorer_df.empty:
