@@ -3477,7 +3477,7 @@ def build_customer_explorer_dataframe(
     return df
 
 
-def format_customer_explorer_preview(df: pd.DataFrame, limit: int = 500) -> pd.DataFrame:
+def format_customer_explorer_preview(df: pd.DataFrame, limit: int = 250) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
 
@@ -3585,11 +3585,34 @@ def create_customer_explorer_layout() -> html.Div:
     return html.Div(
         children=[
             create_tab_intro(
-                "Audience Explorer",
-                "Use this section as the operational audience database. Filter customers by segment, risk, decision, state, card type, or campaign audience, then export the selected list for review or campaign setup.",
+                "Audience Workbench",
+                "Use this page to move from broad portfolio filtering to campaign-specific audience execution. Start with the Portfolio Customer Explorer for general customer review, then use Campaign Audience Review for Scale/Test/Blocked campaign exports.",
             ),
             html.Div(
                 children=[
+                    html.Div(
+                        children=[
+                            html.H3(
+                                "Portfolio Customer Explorer",
+                                style={
+                                    "margin": "0 0 6px 0",
+                                    "fontSize": "20px",
+                                    "fontWeight": "900",
+                                    "color": COLORS["text"],
+                                },
+                            ),
+                            html.P(
+                                "Use this broad explorer to search and filter the active customer portfolio. This is best for general review, QA, and customer-level lookup before moving into campaign-specific exports.",
+                                style={
+                                    "margin": "0",
+                                    "fontSize": "13px",
+                                    "lineHeight": "1.45",
+                                    "color": COLORS["muted"],
+                                },
+                            ),
+                        ],
+                        style={"gridColumn": "1 / -1", "marginBottom": "2px"},
+                    ),
                     html.Div(
                         children=[
                             html.Label(help_label("Search", "Search by customer ID, name, email, city, state, segment, decision, or treatment type.")),
@@ -4347,6 +4370,21 @@ def create_campaign_audience_workbench_shell() -> html.Div:
                 children=[
                     html.Div(
                         children=[
+                            html.Div(
+                                "Step 2 · Campaign execution audience",
+                                style={
+                                    "display": "inline-block",
+                                    "backgroundColor": "#eef2ff",
+                                    "color": "#3730a3",
+                                    "fontSize": "11px",
+                                    "fontWeight": "900",
+                                    "letterSpacing": "0.04em",
+                                    "textTransform": "uppercase",
+                                    "borderRadius": "999px",
+                                    "padding": "5px 9px",
+                                    "marginBottom": "8px",
+                                },
+                            ),
                             html.H3(
                                 "Campaign Audience Review",
                                 style={
@@ -4357,7 +4395,7 @@ def create_campaign_audience_workbench_shell() -> html.Div:
                                 },
                             ),
                             html.P(
-                                "Review the customer audience behind a selected campaign, filter by Scale/Test/Blocked status, preview a small sample, and export the full operational list. The preview stays capped for performance while exports keep the complete filtered audience.",
+                                "Use this focused workspace after choosing a campaign. Filter the campaign audience by Scale, Test, or Blocked status, review the decision summary, preview 25 customers, and export the full filtered execution list.",
                                 style={
                                     "margin": 0,
                                     "fontSize": "13px",
@@ -6408,7 +6446,7 @@ def update_customer_explorer(
         )
         return summary, [], []
 
-    preview_df = format_customer_explorer_preview(explorer_df, limit=500)
+    preview_df = format_customer_explorer_preview(explorer_df, limit=250)
 
     decision_counts = explorer_df["decision_status"].value_counts().to_dict() if "decision_status" in explorer_df.columns else {}
     scale_count = int(decision_counts.get("Scale", 0))
@@ -6419,7 +6457,7 @@ def update_customer_explorer(
     summary = html.Div(
         children=[
             create_kpi_card("Matched Customers", f"{len(explorer_df):,}", "Customers matching current filters", "#2563eb"),
-            create_kpi_card("Preview Rows", f"{len(preview_df):,}", "Rows shown in table preview", "#0ea5e9"),
+            create_kpi_card("Preview Rows", f"{len(preview_df):,}", "Rows shown in capped table preview", "#0ea5e9"),
             create_kpi_card("Scale / Test / Block", f"{scale_count:,} / {test_count:,} / {block_count:,}", "Decision split", "#7c3aed"),
             create_kpi_card("Do Not Launch", f"{do_not_launch_count:,}", "Customers not recommended for launch", "#9ca3af"),
         ],
@@ -7762,7 +7800,7 @@ def update_campaign_audience_preview(active_data, campaign_key, audience_filter)
                 ),
                 html.Div(create_table(preview_rows), style={"overflowX": "auto"}),
                 html.Div(
-                    "Customer 360 handoff: copy any Customer ID from this preview and review the full profile in the Customer 360 / Audience Explorer area.",
+                    "Customer 360 handoff: copy any Customer ID from this preview, then open Customer 360 to review the individual decision trace, risk drivers, and recommended action.",
                     style={
                         "fontSize": "12px",
                         "color": COLORS["muted"],
