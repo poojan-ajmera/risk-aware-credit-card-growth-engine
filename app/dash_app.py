@@ -3881,7 +3881,12 @@ def build_decision_workbench_layout() -> html.Div:
                                     style=tab_style,
                                     selected_style=selected_tab_style,
                                     children=[
-                                        create_customer_explorer_layout()
+                                        create_customer_explorer_layout(),
+                                        html.Div(
+                                            id="campaign-audience-workbench-wrapper",
+                                            children=create_campaign_audience_workbench_shell(),
+                                            style={"marginTop": "18px"},
+                                        ),
                                     ],
                                 ),
 ],
@@ -4343,7 +4348,7 @@ def create_campaign_audience_workbench_shell() -> html.Div:
                     html.Div(
                         children=[
                             html.H3(
-                                "Campaign Audience Workbench",
+                                "Campaign Audience Review",
                                 style={
                                     "fontSize": "20px",
                                     "fontWeight": "900",
@@ -4352,7 +4357,7 @@ def create_campaign_audience_workbench_shell() -> html.Div:
                                 },
                             ),
                             html.P(
-                                "Select one campaign, preview a small sample of matched customers, then export the full operational audience list. This avoids loading thousands or millions of customer rows inside every campaign card.",
+                                "Review the customer audience behind a selected campaign, filter by Scale/Test/Blocked status, preview a small sample, and export the full operational list. The preview stays capped for performance while exports keep the complete filtered audience.",
                                 style={
                                     "margin": 0,
                                     "fontSize": "13px",
@@ -4775,11 +4780,6 @@ app.layout = html.Div(
                                 html.Div(
                                     id="campaign-detail-container",
                                     children=create_campaign_detail_panel(campaign_recommendations),
-                                    style={"marginTop": "18px"},
-                                ),
-                                html.Div(
-                                    id="campaign-audience-workbench-wrapper",
-                                    children=create_campaign_audience_workbench_shell(),
                                     style={"marginTop": "18px"},
                                 ),
                             ],
@@ -7535,6 +7535,114 @@ def format_campaign_audience_preview(export_df: pd.DataFrame, max_rows: int = 25
     return result.to_dict("records")
 
 
+def create_campaign_audience_analysis_card(export_df: pd.DataFrame, filtered_df: pd.DataFrame, audience_filter: str) -> html.Div:
+    """Create a compact business interpretation for the selected campaign audience."""
+    campaign_name = "Selected campaign"
+    if not export_df.empty and "campaign_name" in export_df.columns:
+        campaign_name = str(export_df["campaign_name"].iloc[0])
+
+    audience_label = "All matched" if audience_filter in [None, "all"] else str(audience_filter)
+    total_count = int(len(export_df))
+    filtered_count = int(len(filtered_df))
+
+    if filtered_df.empty:
+        bullets = [
+            f"No customers match the {audience_label} filter for {campaign_name}.",
+            "Switch to All matched or another audience status to review the operational audience.",
+            "Do not export an empty audience for campaign execution.",
+        ]
+    else:
+        top_segment = "Unknown segment"
+        if "customer_segment" in filtered_df.columns:
+            segment_counts = filtered_df["customer_segment"].fillna("Unknown segment").astype(str).value_counts()
+            if not segment_counts.empty:
+                top_segment = f"{segment_counts.index[0]} ({int(segment_counts.iloc[0]):,} customers)"
+
+        top_risk = "Unknown risk band"
+        if "risk_band" in filtered_df.columns:
+            risk_counts = filtered_df["risk_band"].fillna("Unknown risk band").astype(str).value_counts()
+            if not risk_counts.empty:
+                top_risk = f"{risk_counts.index[0]} ({int(risk_counts.iloc[0]):,} customers)"
+
+        scale_count = 0
+        test_count = 0
+        blocked_count = 0
+        if "campaign_audience_status" in export_df.columns:
+            status_counts = export_df["campaign_audience_status"].fillna("Unknown").astype(str).value_counts()
+            scale_count = int(status_counts.get("Scale", 0))
+            test_count = int(status_counts.get("Test", 0))
+            blocked_count = int(status_counts.get("Blocked", 0))
+
+        avg_spend = None
+        if "monthly_spend" in filtered_df.columns:
+            avg_spend = pd.to_numeric(filtered_df["monthly_spend"], errors="coerce").dropna()
+            avg_spend = float(avg_spend.mean()) if not avg_spend.empty else None
+
+        avg_profit = None
+        if "risk_adjusted_profit" in filtered_df.columns:
+            avg_profit = pd.to_numeric(filtered_df["risk_adjusted_profit"], errors="coerce").dropna()
+            avg_profit = float(avg_profit.mean()) if not avg_profit.empty else None
+
+        blocked_share = blocked_count / total_count if total_count else 0
+
+        if audience_filter == "Scale":
+            next_action = "Prioritize this audience for controlled rollout execution, then monitor early response and credit-risk movement."
+        elif audience_filter == "Test":
+            next_action = "Use this audience for experiment design before expanding rollout."
+        elif audience_filter == "Blocked":
+            next_action = "Do not launch growth offers to this audience; route to guardrail review or protective treatment."
+        elif blocked_share >= 0.20:
+            next_action = "Review guardrails before launch because a meaningful share of the matched audience is blocked."
+        elif scale_count >= test_count:
+            next_action = "Use Scale customers for near-term rollout and keep Test customers in a measured experiment."
+        else:
+            next_action = "Treat this as a test-first campaign because the matched audience needs validation before scaling."
+
+        bullets = [
+            f"{campaign_name} has {total_count:,} total matched customers; the current filter shows {filtered_count:,}.",
+            f"Decision mix across the full matched audience: {scale_count:,} Scale, {test_count:,} Test, {blocked_count:,} Blocked.",
+            f"Largest visible segment in this filter: {top_segment}.",
+            f"Main risk concentration in this filter: {top_risk}.",
+        ]
+
+        if avg_spend is not None:
+            bullets.append(f"Average monthly spend in this filtered audience is about ${avg_spend:,.0f}.")
+        if avg_profit is not None:
+            bullets.append(f"Average risk-adjusted profit in this filtered audience is about ${avg_profit:,.0f}.")
+
+        bullets.append(f"Recommended next action: {next_action}")
+
+    return html.Div(
+        children=[
+            html.Div(
+                "Audience analysis",
+                style={
+                    "fontSize": "14px",
+                    "fontWeight": "900",
+                    "color": COLORS["text"],
+                    "marginBottom": "8px",
+                },
+            ),
+            html.Ul(
+                [html.Li(bullet, style={"marginBottom": "6px"}) for bullet in bullets],
+                style={
+                    "margin": 0,
+                    "paddingLeft": "18px",
+                    "fontSize": "13px",
+                    "lineHeight": "1.45",
+                    "color": COLORS["muted"],
+                },
+            ),
+        ],
+        style={
+            "backgroundColor": "#f8fafc",
+            "border": f"1px solid {COLORS['border']}",
+            "borderRadius": "14px",
+            "padding": "14px",
+        },
+    )
+
+
 @app.callback(
     Output("campaign-audience-campaign-dropdown", "options"),
     Output("campaign-audience-campaign-dropdown", "value"),
@@ -7601,7 +7709,7 @@ def update_campaign_audience_preview(active_data, campaign_key, audience_filter)
 
     audience_label = "All matched" if audience_filter in [None, "all"] else str(audience_filter)
 
-    summary = html.Div(
+    summary_metrics = html.Div(
         children=[
             create_metric_chip("Campaign", str(export_df["campaign_name"].iloc[0]) if "campaign_name" in export_df.columns else "Selected campaign"),
             create_metric_chip("Audience Filter", audience_label),
@@ -7612,6 +7720,18 @@ def update_campaign_audience_preview(active_data, campaign_key, audience_filter)
             "display": "grid",
             "gridTemplateColumns": "repeat(4, minmax(0, 1fr))",
             "gap": "10px",
+        },
+    )
+
+    summary = html.Div(
+        children=[
+            summary_metrics,
+            create_campaign_audience_analysis_card(export_df, filtered_df, audience_filter),
+        ],
+        style={
+            "display": "grid",
+            "gridTemplateColumns": "1fr",
+            "gap": "12px",
         },
     )
 
