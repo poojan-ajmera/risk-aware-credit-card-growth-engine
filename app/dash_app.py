@@ -1366,12 +1366,12 @@ def create_strategy_flow_diagram() -> html.Div:
     steps = [
         {
             "title": "Customer Portfolio",
-            "body": "Existing cardholders with spend, balance, credit, risk, and engagement signals.",
+            "body": "Active cardholders from either the synthetic demo portfolio or the uploaded customer file.",
             "accent": "#2563eb",
         },
         {
             "title": "Segment Strategy",
-            "body": "Group customers into Core, Loyal, High-Utilization, Dormant, Premium, and Risk Watch.",
+            "body": "Group customers into active portfolio segments using spend, credit risk, engagement, and profitability signals.",
             "accent": "#0ea5e9",
         },
         {
@@ -1548,19 +1548,47 @@ def build_strategy_risk_return_figure():
     return fig
 
 
+
+def strategy_placeholder_figure(message: str):
+    """Small placeholder figure for Strategy Playbook before callbacks load."""
+    fig = px.scatter(title=message)
+    fig.update_layout(
+        height=420,
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        margin=dict(l=30, r=30, t=70, b=30),
+        font=dict(family="Arial", size=12, color=COLORS["text"]),
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        annotations=[
+            dict(
+                text=message,
+                x=0.5,
+                y=0.5,
+                xref="paper",
+                yref="paper",
+                showarrow=False,
+                font=dict(size=15, color=COLORS["muted"]),
+            )
+        ],
+    )
+    return fig
+
+
 def create_strategy_risk_return_section() -> html.Div:
     return html.Div(
         children=[
             html.H3(
-                "Risk-Return Matrix",
+                "Active Segment Risk-Return Matrix",
                 style={"fontSize": "22px", "fontWeight": "900", "margin": "0 0 8px 0"},
             ),
             html.P(
-                "This view explains why some segments are ready to scale while others should be tested, constrained, or blocked. Higher profit is better, but higher default probability requires stronger guardrails.",
+                "Each bubble is a customer segment in the active master dataset. Higher profit is better, but higher default probability requires more control, testing, or guardrails.",
                 style={"color": COLORS["muted"], "lineHeight": "1.5", "margin": "0 0 14px 0"},
             ),
             dcc.Graph(
-                figure=build_strategy_risk_return_figure(),
+                id="strategy-risk-return-chart",
+                figure=strategy_placeholder_figure("Strategy risk-return chart will load from the active master dataset."),
                 config={"displayModeBar": True},
             ),
         ],
@@ -1576,174 +1604,22 @@ def create_strategy_risk_return_section() -> html.Div:
 
 
 def create_strategy_playbook_table() -> html.Div:
-    rows = [
-        {
-            "priority": "1",
-            "segment": "Core Customer",
-            "campaign": "Everyday spend, merchant offers, servicing enrollment",
-            "decision": "Scale",
-            "action": "Launch broad campaigns with standard guardrails.",
-            "risk": "Low-to-moderate risk; monitor response and profitability.",
-            "owner": "Growth / Portfolio Marketing",
-            "next_step": "Send to Scenario Simulator or export Scale audience.",
-        },
-        {
-            "priority": "2",
-            "segment": "Loyal High-Value Customer",
-            "campaign": "Retention, premium, travel, loyalty campaigns",
-            "decision": "Scale",
-            "action": "Prioritize upgrade, retention, and value-deepening offers.",
-            "risk": "Strong value segment; avoid over-incentivizing customers who would spend anyway.",
-            "owner": "Lifecycle / Loyalty",
-            "next_step": "Compare campaign ROI and test offer variants.",
-        },
-        {
-            "priority": "3",
-            "segment": "High-Utilization Revolver",
-            "campaign": "Balance health, payment reminders, utilization nudges",
-            "decision": "Test / Constrain",
-            "action": "Use controlled testing and protective engagement, not aggressive spend growth.",
-            "risk": "High utilization can create revenue but also credit stress.",
-            "owner": "Risk + Customer Management",
-            "next_step": "Use A/B Planner and guardrail review before rollout.",
-        },
-        {
-            "priority": "4",
-            "segment": "Underused Low-Risk Customer",
-            "campaign": "Everyday spend, merchant offers, digital activation",
-            "decision": "Test",
-            "action": "Test activation campaigns to increase usage without raising risk.",
-            "risk": "Low risk, but upside may be uncertain if engagement is weak.",
-            "owner": "Engagement / Digital",
-            "next_step": "Run low-cost A/B tests and export Test audience.",
-        },
-        {
-            "priority": "5",
-            "segment": "Dormant but Recoverable",
-            "campaign": "Reactivation, digital engagement, servicing nudges",
-            "decision": "Test",
-            "action": "Run small reactivation campaigns with clear success metrics.",
-            "risk": "Dormancy means response may be low; avoid large spend before proof.",
-            "owner": "Lifecycle Reactivation",
-            "next_step": "Test messaging and channel preference.",
-        },
-        {
-            "priority": "6",
-            "segment": "Premium Growth Candidate",
-            "campaign": "Premium, travel, merchant partnerships",
-            "decision": "Scale / Test",
-            "action": "Use higher-value offers only when risk-adjusted profit supports it.",
-            "risk": "Rewards cost can reduce profit if offer is too rich.",
-            "owner": "Premium Product / Partnerships",
-            "next_step": "Compare expected ROI and campaign cost.",
-        },
-        {
-            "priority": "7",
-            "segment": "Risk Watch",
-            "campaign": "Protective servicing only",
-            "decision": "Block",
-            "action": "Do not send growth offers. Use monitoring or servicing support only.",
-            "risk": "Guardrail segment; avoid risky or aggressive growth treatment.",
-            "owner": "Credit Risk / Compliance",
-            "next_step": "Review Guardrails, not campaign rollout.",
-        },
-    ]
-
-    header_style = {
-        "padding": "12px",
-        "fontSize": "12px",
-        "fontWeight": "900",
-        "color": COLORS["muted"],
-        "textTransform": "uppercase",
-        "borderBottom": f"1px solid {COLORS['border']}",
-        "backgroundColor": "#f8fafc",
-        "textAlign": "left",
-    }
-
-    cell_style = {
-        "padding": "12px",
-        "fontSize": "13px",
-        "lineHeight": "1.4",
-        "borderBottom": f"1px solid {COLORS['border']}",
-        "verticalAlign": "top",
-    }
-
-    decision_colors = {
-        "Scale": "#16a34a",
-        "Scale / Test": "#16a34a",
-        "Test": "#2563eb",
-        "Test / Constrain": "#f97316",
-        "Block": "#dc2626",
-    }
-
     return html.Div(
         children=[
             html.H3(
-                "Segment Strategy Playbook",
+                "Active Segment Strategy Playbook",
                 style={"fontSize": "22px", "fontWeight": "900", "margin": "0 0 8px 0"},
             ),
             html.P(
-                "This table turns portfolio analysis into business actions. It explains what each segment should receive, how to treat it, who should own it, and what the next step should be.",
+                "These strategy cards are rebuilt from the active master dataset. They show which segments exist, how valuable/risky they are, what strategy should be used, and what action should happen next.",
                 style={"color": COLORS["muted"], "lineHeight": "1.5", "margin": "0 0 16px 0"},
             ),
-            html.Table(
-                children=[
-                    html.Thead(
-                        html.Tr(
-                            [
-                                html.Th("Priority", style=header_style),
-                                html.Th("Segment", style=header_style),
-                                html.Th("Campaign Fit", style=header_style),
-                                html.Th("Decision", style=header_style),
-                                html.Th("Recommended Action", style=header_style),
-                                html.Th("Risk Note", style=header_style),
-                                html.Th("Owner", style=header_style),
-                                html.Th("Next Step", style=header_style),
-                            ]
-                        )
-                    ),
-                    html.Tbody(
-                        [
-                            html.Tr(
-                                children=[
-                                    html.Td(row["priority"], style={**cell_style, "fontWeight": "900"}),
-                                    html.Td(row["segment"], style={**cell_style, "fontWeight": "900"}),
-                                    html.Td(row["campaign"], style=cell_style),
-                                    html.Td(
-                                        html.Span(
-                                            row["decision"],
-                                            title=f"Recommended rollout posture: {row['decision']}",
-                                            style={
-                                                "backgroundColor": decision_colors.get(row["decision"], "#9ca3af"),
-                                                "color": "white",
-                                                "borderRadius": "999px",
-                                                "padding": "6px 10px",
-                                                "fontSize": "12px",
-                                                "fontWeight": "900",
-                                                "display": "inline-block",
-                                            },
-                                        ),
-                                        style=cell_style,
-                                    ),
-                                    html.Td(row["action"], style=cell_style),
-                                    html.Td(row["risk"], style=cell_style),
-                                    html.Td(row["owner"], style=cell_style),
-                                    html.Td(row["next_step"], style=cell_style),
-                                ],
-                                title=f"{row['segment']}: {row['action']}",
-                            )
-                            for row in rows
-                        ]
-                    ),
-                ],
-                style={
-                    "width": "100%",
-                    "borderCollapse": "collapse",
-                    "backgroundColor": "#ffffff",
-                    "border": f"1px solid {COLORS['border']}",
-                    "borderRadius": "14px",
-                    "overflow": "hidden",
-                },
+            html.Div(
+                id="strategy-playbook-table-container",
+                children=html.Div(
+                    "Strategy table will load from the active master dataset.",
+                    style={"color": COLORS["muted"]},
+                ),
             ),
         ],
         style={
@@ -1759,66 +1635,38 @@ def create_strategy_playbook_table() -> html.Div:
 
 
 def create_strategy_cta_panel() -> html.Div:
-    ctas = [
-        {
-            "title": "Pick a campaign",
-            "body": "Go to Campaigns & Offers to select a recommended campaign from the scored library.",
-            "accent": "#2563eb",
-        },
-        {
-            "title": "Test the campaign",
-            "body": "Use Decision Workbench to simulate profit impact and design an A/B test.",
-            "accent": "#7c3aed",
-        },
-        {
-            "title": "Export the audience",
-            "body": "Download eligible, test, scale, or blocked customers from the Export Center.",
-            "accent": "#16a34a",
-        },
-        {
-            "title": "Review guardrails",
-            "body": "Use Guardrails as the final review before campaign launch.",
-            "accent": "#dc2626",
-        },
-    ]
-
     return html.Div(
         children=[
-            html.H3(
-                "How this playbook connects the dashboard",
-                style={"fontSize": "22px", "fontWeight": "900", "margin": "0 0 8px 0"},
-            ),
-            html.P(
-                "The playbook is the bridge between analytics and action. It tells a business user what to do next after reading the charts.",
-                style={"color": COLORS["muted"], "lineHeight": "1.5", "margin": "0 0 16px 0"},
-            ),
             html.Div(
                 children=[
                     html.Div(
-                        children=[
-                            html.Div(
-                                style={
-                                    "height": "5px",
-                                    "width": "44px",
-                                    "backgroundColor": cta["accent"],
-                                    "borderRadius": "999px",
-                                    "marginBottom": "12px",
-                                },
-                            ),
-                            html.Div(cta["title"], style={"fontWeight": "900", "fontSize": "15px", "marginBottom": "6px"}),
-                            html.Div(cta["body"], style={"fontSize": "13px", "lineHeight": "1.45", "color": COLORS["muted"]}),
-                        ],
-                        title=cta["body"],
+                        "ACTIVE PORTFOLIO STRATEGY",
                         style={
-                            "backgroundColor": "#ffffff",
-                            "border": f"1px solid {COLORS['border']}",
-                            "borderRadius": "14px",
-                            "padding": "14px",
+                            "fontSize": "12px",
+                            "fontWeight": "900",
+                            "letterSpacing": "0.08em",
+                            "color": COLORS["blue"],
+                            "textTransform": "uppercase",
+                            "marginBottom": "8px",
                         },
-                    )
-                    for cta in ctas
-                ],
-                style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px"},
+                    ),
+                    html.H3(
+                        "What should the business do next?",
+                        style={"fontSize": "24px", "fontWeight": "900", "margin": "0 0 8px 0"},
+                    ),
+                    html.P(
+                        "This section reads the active master dataset and turns the portfolio into a practical next-step strategy. When a customer file is uploaded, the playbook recalculates from that uploaded portfolio.",
+                        style={"color": COLORS["muted"], "lineHeight": "1.5", "margin": "0"},
+                    ),
+                ]
+            ),
+            html.Div(
+                id="strategy-executive-recommendation",
+                children=html.Div(
+                    "Strategy recommendations will load from the active master dataset.",
+                    style={"color": COLORS["muted"], "marginTop": "14px"},
+                ),
+                style={"marginTop": "16px"},
             ),
         ],
         style={
@@ -1830,8 +1678,6 @@ def create_strategy_cta_panel() -> html.Div:
             "marginTop": "18px",
         },
     )
-
-
 
 
 def create_governance_layout() -> html.Div:
@@ -2241,7 +2087,7 @@ def create_campaigns_action_panel() -> html.Div:
 def create_playbook_action_panel() -> html.Div:
     return create_workflow_cta_panel(
         "Use the playbook to take action",
-        "The playbook tells the business user what to do next. Use these shortcuts to move from strategy into execution.",
+        "Use these shortcuts to move from active strategy into execution.",
         [
             {
                 "label": "Choose Campaign",
@@ -4592,7 +4438,7 @@ app.layout = html.Div(
                     children=[
                         create_tab_intro(
                             "Strategy Playbook",
-                            "This page translates the analytics into a practical operating playbook. It shows what each customer segment should receive, which campaigns fit, where to scale, where to test, where to constrain, and where guardrails should stop launch.",
+                            "This page turns the active portfolio into an operating plan. It shows which segments to scale, test, constrain, or protect before campaign launch.",
                         ),
                         create_strategy_cta_panel(),
                         create_playbook_action_panel(),
@@ -4601,7 +4447,7 @@ app.layout = html.Div(
                         create_strategy_playbook_table(),
                         create_insight_card(
                             "How to read this playbook",
-                            "Use this page as the business decision layer. The flow sketch explains the end-to-end process, the risk-return matrix shows why each segment needs a different rollout posture, and the playbook table turns the analysis into segment-level actions.",
+                            "Use this page as the business decision layer. The flow sketch explains the end-to-end process, the risk-return matrix shows why each segment needs a different rollout posture, and the strategy cards turn the analysis into segment-level actions.",
                         ),
                     ],
                 ),
@@ -7068,6 +6914,445 @@ def update_top_kpi_row(active_data):
         create_kpi_card("Campaign Eligible", format_percent(eligible_rate), "Scale or Test customers", "#7c3aed"),
         create_kpi_card("Blocked by Guardrails", format_percent(block_rate), "Protected from growth offers", "#dc2626"),
     ]
+
+
+
+
+def classify_segment_strategy(row: pd.Series) -> tuple[str, str, str, str]:
+    """Classify segment strategy from active portfolio economics and risk."""
+    segment = str(row.get("customer_segment", "Unknown"))
+    customer_count = int(row.get("customer_count", 0))
+    avg_default_probability = float(row.get("avg_default_probability", 0))
+    avg_profit = float(row.get("avg_risk_adjusted_profit", 0))
+    eligible_rate = float(row.get("campaign_eligible_rate", 0))
+    scale_rate = float(row.get("scale_rate", 0))
+    block_rate = float(row.get("block_rate", 0))
+
+    if customer_count == 0:
+        return (
+            "Review",
+            "No customers available in this segment.",
+            "Data Quality / Analytics",
+            "Upload a larger file or check segmentation inputs.",
+        )
+
+    if block_rate >= 0.40 or avg_default_probability >= 0.08 or segment == "Risk Watch":
+        return (
+            "Block / Protect",
+            "Risk is too high for growth offers. Use servicing, monitoring, or protective engagement.",
+            "Credit Risk / Compliance",
+            "Review Guardrails before any campaign launch.",
+        )
+
+    if scale_rate >= 0.50 and avg_profit > 0 and avg_default_probability <= 0.04:
+        return (
+            "Scale",
+            "Segment has positive risk-adjusted value and enough Scale decisions for broader rollout.",
+            "Growth / Portfolio Marketing",
+            "Move to Campaigns & Offers, then validate economics in Scenario Simulator.",
+        )
+
+    if eligible_rate >= 0.50 and avg_profit > 0 and avg_default_probability <= 0.07:
+        return (
+            "Test",
+            "Segment has opportunity, but the best next step is a controlled test before broad rollout.",
+            "Lifecycle / Experimentation",
+            "Use A/B Planner and export a test audience.",
+        )
+
+    if avg_profit > 0 and avg_default_probability > 0.04:
+        return (
+            "Constrain",
+            "Segment is profitable but risk is elevated, so growth should be limited and monitored.",
+            "Risk + Customer Management",
+            "Run a smaller audience test with strict guardrails.",
+        )
+
+    return (
+        "Do Not Launch",
+        "Current economics or eligibility do not justify a campaign launch.",
+        "Portfolio Strategy",
+        "Monitor the segment or improve targeting before launch.",
+    )
+
+
+def build_active_strategy_summary(master_df: pd.DataFrame) -> pd.DataFrame:
+    """Create active segment-level summary for the strategy playbook."""
+    if master_df is None or master_df.empty or "customer_segment" not in master_df.columns:
+        return pd.DataFrame()
+
+    df = master_df.copy()
+
+    for column in [
+        "default_probability",
+        "risk_adjusted_profit",
+        "expected_roi",
+        "monthly_spend",
+    ]:
+        if column not in df.columns:
+            df[column] = 0
+        df[column] = pd.to_numeric(df[column], errors="coerce").fillna(0)
+
+    if "decision_status" not in df.columns:
+        df["decision_status"] = "Unknown"
+
+    df["scale_flag"] = (df["decision_status"] == "Scale").astype(int)
+    df["test_flag"] = (df["decision_status"] == "Test").astype(int)
+    df["block_flag"] = (df["decision_status"] == "Block").astype(int)
+    df["eligible_flag"] = df["decision_status"].isin(["Scale", "Test"]).astype(int)
+
+    summary = (
+        df.groupby("customer_segment", as_index=False)
+        .agg(
+            customer_count=("customer_segment", "size"),
+            total_monthly_spend=("monthly_spend", "sum"),
+            total_risk_adjusted_profit=("risk_adjusted_profit", "sum"),
+            avg_risk_adjusted_profit=("risk_adjusted_profit", "mean"),
+            avg_default_probability=("default_probability", "mean"),
+            avg_expected_roi=("expected_roi", "mean"),
+            scale_count=("scale_flag", "sum"),
+            test_count=("test_flag", "sum"),
+            block_count=("block_flag", "sum"),
+            eligible_count=("eligible_flag", "sum"),
+        )
+    )
+
+    summary["scale_rate"] = summary["scale_count"] / summary["customer_count"]
+    summary["test_rate"] = summary["test_count"] / summary["customer_count"]
+    summary["block_rate"] = summary["block_count"] / summary["customer_count"]
+    summary["campaign_eligible_rate"] = summary["eligible_count"] / summary["customer_count"]
+
+    strategy_results = summary.apply(classify_segment_strategy, axis=1)
+    summary["strategy_decision"] = [result[0] for result in strategy_results]
+    summary["strategy_reason"] = [result[1] for result in strategy_results]
+    summary["strategy_owner"] = [result[2] for result in strategy_results]
+    summary["next_step"] = [result[3] for result in strategy_results]
+
+    summary["opportunity_score"] = (
+        summary["total_risk_adjusted_profit"]
+        + summary["eligible_count"] * 10
+        - summary["avg_default_probability"] * 100
+        - summary["block_count"] * 25
+    )
+
+    strategy_sort_order = {
+        "Scale": 1,
+        "Test": 2,
+        "Constrain": 3,
+        "Block / Protect": 4,
+        "Do Not Launch": 5,
+        "Review": 6,
+    }
+    summary["strategy_sort_order"] = summary["strategy_decision"].map(strategy_sort_order).fillna(99)
+
+    summary = summary.sort_values(
+        ["strategy_sort_order", "opportunity_score", "customer_count"],
+        ascending=[True, False, False],
+    ).reset_index(drop=True)
+
+    summary["priority"] = summary.index + 1
+
+    return summary
+
+
+def build_active_strategy_risk_return_figure(strategy_df: pd.DataFrame):
+    if strategy_df is None or strategy_df.empty:
+        return strategy_placeholder_figure("No strategy data available for the active master dataset.")
+
+    plot_df = strategy_df.copy()
+    plot_df["avg_default_probability_pct"] = plot_df["avg_default_probability"] * 100
+
+    fig = px.scatter(
+        plot_df,
+        x="avg_default_probability_pct",
+        y="avg_risk_adjusted_profit",
+        size="customer_count",
+        color="strategy_decision",
+        hover_name="customer_segment",
+        hover_data={
+            "customer_count": ":,",
+            "avg_default_probability_pct": ":.2f",
+            "avg_risk_adjusted_profit": ":.2f",
+            "campaign_eligible_rate": ":.1%",
+            "strategy_decision": True,
+        },
+        title="Active Segment Risk-Return Matrix",
+        labels={
+            "avg_default_probability_pct": "Average default probability (%)",
+            "avg_risk_adjusted_profit": "Average risk-adjusted profit",
+            "strategy_decision": "Strategy decision",
+            "customer_count": "Customer count",
+        },
+        size_max=58,
+    )
+
+    fig.add_hline(
+        y=0,
+        line_dash="dash",
+        line_color="#9ca3af",
+        annotation_text="Profit break-even",
+        annotation_position="bottom right",
+    )
+
+    fig.update_layout(
+        height=520,
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        margin=dict(l=30, r=30, t=70, b=30),
+        legend_title_text="Strategy decision",
+        font=dict(family="Arial", size=12, color=COLORS["text"]),
+    )
+
+    fig.update_xaxes(showgrid=True, gridcolor="#e5e7eb", zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor="#e5e7eb", zeroline=False, tickprefix="$")
+
+    return fig
+
+
+def render_strategy_executive_panel(master_df: pd.DataFrame, strategy_df: pd.DataFrame):
+    if strategy_df is None or strategy_df.empty:
+        return create_zero_state_card(
+            "No active strategy available",
+            "The active master dataset does not contain enough segment information to produce a strategy.",
+            "Upload a valid customer file or use the synthetic demo portfolio.",
+        )
+
+    total_customers = int(len(master_df))
+    top_row = strategy_df.iloc[0]
+    top_segment = top_row["customer_segment"]
+    top_decision = top_row["strategy_decision"]
+
+    scale_segments = strategy_df[strategy_df["strategy_decision"] == "Scale"]["customer_segment"].tolist()
+    test_segments = strategy_df[strategy_df["strategy_decision"] == "Test"]["customer_segment"].tolist()
+    protect_segments = strategy_df[strategy_df["strategy_decision"].isin(["Block / Protect", "Constrain"])]["customer_segment"].tolist()
+
+    if scale_segments:
+        next_move = f"Prioritize {scale_segments[0]} for a controlled scale-ready campaign."
+    elif test_segments:
+        next_move = f"Run a controlled test for {test_segments[0]} before scaling."
+    elif protect_segments:
+        next_move = f"Focus on risk control for {protect_segments[0]} before any growth campaign."
+    else:
+        next_move = f"Monitor {top_segment}; no broad launch is recommended yet."
+
+    active_mode = "Active"
+
+    return html.Div(
+        children=[
+            html.Div(
+                children=[
+                    create_kpi_card("Active Customers", f"{total_customers:,}", "Current master dataset", "#2563eb"),
+                    create_kpi_card("Segments Found", f"{len(strategy_df):,}", "Segments in active data", "#0ea5e9"),
+                    create_kpi_card("Top Strategy", top_decision, f"Primary segment: {top_segment}", "#7c3aed"),
+                    create_kpi_card("Next Move", "Action Required", next_move, "#16a34a"),
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "repeat(4, 1fr)",
+                    "gap": "14px",
+                    "marginBottom": "14px",
+                },
+            ),
+            html.Div(
+                children=[
+                    html.Strong("Strategy explanation: "),
+                    f"The playbook is using the active master dataset and recommends '{top_decision}' for {top_segment}. "
+                    f"{top_row['strategy_reason']}",
+                ],
+                style={
+                    "backgroundColor": "#eff6ff",
+                    "border": "1px solid #bfdbfe",
+                    "borderRadius": "14px",
+                    "padding": "14px",
+                    "lineHeight": "1.5",
+                    "color": "#1e3a8a",
+                    "marginBottom": "14px",
+                },
+            ),
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div("1", style={"fontWeight": "900", "fontSize": "18px", "color": "#2563eb"}),
+                            html.Strong("Select priority segment"),
+                            html.Div(top_segment, style={"color": COLORS["muted"], "marginTop": "4px"}),
+                        ],
+                        style={"backgroundColor": "#ffffff", "border": f"1px solid {COLORS['border']}", "borderRadius": "14px", "padding": "14px"},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div("2", style={"fontWeight": "900", "fontSize": "18px", "color": "#7c3aed"}),
+                            html.Strong("Choose campaign"),
+                            html.Div("Use Campaigns & Offers to pick matching campaign opportunities.", style={"color": COLORS["muted"], "marginTop": "4px"}),
+                        ],
+                        style={"backgroundColor": "#ffffff", "border": f"1px solid {COLORS['border']}", "borderRadius": "14px", "padding": "14px"},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div("3", style={"fontWeight": "900", "fontSize": "18px", "color": "#f97316"}),
+                            html.Strong("Simulate and test"),
+                            html.Div("Use Scenario Simulator and A/B Planner before broad rollout.", style={"color": COLORS["muted"], "marginTop": "4px"}),
+                        ],
+                        style={"backgroundColor": "#ffffff", "border": f"1px solid {COLORS['border']}", "borderRadius": "14px", "padding": "14px"},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div("4", style={"fontWeight": "900", "fontSize": "18px", "color": "#dc2626"}),
+                            html.Strong("Guardrail review"),
+                            html.Div("Check blocked/risky groups before launch or export.", style={"color": COLORS["muted"], "marginTop": "4px"}),
+                        ],
+                        style={"backgroundColor": "#ffffff", "border": f"1px solid {COLORS['border']}", "borderRadius": "14px", "padding": "14px"},
+                    ),
+                ],
+                style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px"},
+            ),
+        ]
+    )
+
+
+def render_strategy_playbook_table(strategy_df: pd.DataFrame):
+    if strategy_df is None or strategy_df.empty:
+        return create_zero_state_card(
+            "No strategy table available",
+            "The active master dataset does not contain segment-level records.",
+            "Upload a valid customer file or use the synthetic demo portfolio.",
+        )
+
+    strategy_colors = {
+        "Scale": "#16a34a",
+        "Test": "#2563eb",
+        "Constrain": "#f97316",
+        "Block / Protect": "#dc2626",
+        "Do Not Launch": "#64748b",
+        "Review": "#7c3aed",
+    }
+
+    cards = []
+
+    for _, row in strategy_df.iterrows():
+        strategy = row["strategy_decision"]
+        accent = strategy_colors.get(strategy, "#2563eb")
+
+        cards.append(
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div(
+                                f"Priority {int(row['priority'])}",
+                                style={
+                                    "fontSize": "12px",
+                                    "fontWeight": "900",
+                                    "color": COLORS["muted"],
+                                    "textTransform": "uppercase",
+                                },
+                            ),
+                            html.Div(
+                                strategy,
+                                style={
+                                    "fontSize": "12px",
+                                    "fontWeight": "900",
+                                    "color": "white",
+                                    "backgroundColor": accent,
+                                    "borderRadius": "999px",
+                                    "padding": "6px 10px",
+                                },
+                            ),
+                        ],
+                        style={
+                            "display": "flex",
+                            "justifyContent": "space-between",
+                            "alignItems": "center",
+                            "marginBottom": "10px",
+                        },
+                    ),
+                    html.H4(
+                        row["customer_segment"],
+                        style={
+                            "fontSize": "18px",
+                            "fontWeight": "900",
+                            "margin": "0 0 12px 0",
+                            "color": COLORS["text"],
+                        },
+                    ),
+                    html.Div(
+                        children=[
+                            create_metric_chip("Customers", f"{int(row['customer_count']):,}"),
+                            create_metric_chip("Default Risk", f"{row['avg_default_probability']:.2%}"),
+                            create_metric_chip("Avg Profit", format_currency(row["avg_risk_adjusted_profit"])),
+                            create_metric_chip("Eligible", f"{row['campaign_eligible_rate']:.1%}"),
+                        ],
+                        style={
+                            "display": "grid",
+                            "gridTemplateColumns": "repeat(4, 1fr)",
+                            "gap": "8px",
+                            "marginBottom": "12px",
+                        },
+                    ),
+                    html.Div(
+                        children=[
+                            html.Strong("Why: "),
+                            row["strategy_reason"],
+                        ],
+                        style={
+                            "fontSize": "13px",
+                            "lineHeight": "1.45",
+                            "color": COLORS["text"],
+                            "marginBottom": "10px",
+                        },
+                    ),
+                    html.Div(
+                        children=[
+                            html.Strong("Next step: "),
+                            row["next_step"],
+                        ],
+                        style={
+                            "fontSize": "13px",
+                            "lineHeight": "1.45",
+                            "color": COLORS["muted"],
+                            "backgroundColor": "#f8fafc",
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderRadius": "12px",
+                            "padding": "10px",
+                        },
+                    ),
+                ],
+                style={
+                    "backgroundColor": "#ffffff",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderTop": f"5px solid {accent}",
+                    "borderRadius": "16px",
+                    "padding": "16px",
+                    "boxShadow": "0 6px 16px rgba(15, 23, 42, 0.05)",
+                },
+            )
+        )
+
+    return html.Div(
+        children=cards,
+        style={
+            "display": "grid",
+            "gridTemplateColumns": "repeat(auto-fit, minmax(460px, 1fr))",
+            "gap": "14px",
+        },
+    )
+
+
+@app.callback(
+    Output("strategy-executive-recommendation", "children"),
+    Output("strategy-risk-return-chart", "figure"),
+    Output("strategy-playbook-table-container", "children"),
+    Input("active-customer-data-store", "data"),
+)
+def update_strategy_playbook_from_active_master(active_data):
+    master_df = get_active_customer_features(active_data)
+    strategy_df = build_active_strategy_summary(master_df)
+
+    executive_panel = render_strategy_executive_panel(master_df, strategy_df)
+    risk_return_fig = build_active_strategy_risk_return_figure(strategy_df)
+    playbook_table = render_strategy_playbook_table(strategy_df)
+
+    return executive_panel, risk_return_fig, playbook_table
 
 
 
