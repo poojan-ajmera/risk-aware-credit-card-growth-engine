@@ -3477,7 +3477,7 @@ def build_customer_explorer_dataframe(
     return df
 
 
-def format_customer_explorer_preview(df: pd.DataFrame, limit: int = 250) -> pd.DataFrame:
+def format_customer_explorer_preview(df: pd.DataFrame, limit: int = 100, include_email: bool = False) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
 
@@ -3521,24 +3521,21 @@ def format_customer_explorer_preview(df: pd.DataFrame, limit: int = 250) -> pd.D
     preview_columns = [
         "Customer ID",
         "Name",
-        "Email",
-        "City",
         "State",
         "Segment",
         "Risk Band",
         "Decision",
         "Recommended Action",
-        "Treatment Type",
-        "Card Type",
-        "Rewards",
         "Credit Score",
         "Utilization",
         "Default Probability",
         "Monthly Spend",
         "Risk-Adjusted Profit",
         "Expected ROI",
-        "Preferred Channel",
     ]
+
+    if include_email and "Email" in preview.columns:
+        preview_columns.insert(2, "Email")
 
     preview_columns = [column for column in preview_columns if column in preview.columns]
 
@@ -3587,6 +3584,41 @@ def create_customer_explorer_layout() -> html.Div:
             create_tab_intro(
                 "Audience Workbench",
                 "Use this page to move from broad portfolio filtering to campaign-specific audience execution. Start with the Portfolio Customer Explorer for general customer review, then use Campaign Audience Review for Scale/Test/Blocked campaign exports.",
+            ),
+            html.Div(
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div("1", style={"backgroundColor": COLORS["blue"], "color": "white", "width": "28px", "height": "28px", "borderRadius": "50%", "display": "flex", "alignItems": "center", "justifyContent": "center", "fontWeight": "900"}),
+                            html.Div([html.Strong("Explore portfolio"), html.Div("Filter customers by segment, risk, decision, state, card type, or campaign fit.", style={"color": COLORS["muted"], "fontSize": "13px", "marginTop": "4px"})]),
+                        ],
+                        style={"display": "grid", "gridTemplateColumns": "32px 1fr", "gap": "10px", "alignItems": "start"},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div("2", style={"backgroundColor": "#7C3AED", "color": "white", "width": "28px", "height": "28px", "borderRadius": "50%", "display": "flex", "alignItems": "center", "justifyContent": "center", "fontWeight": "900"}),
+                            html.Div([html.Strong("Review campaign audience"), html.Div("Select a campaign and split matched customers into Scale, Test, or Blocked groups.", style={"color": COLORS["muted"], "fontSize": "13px", "marginTop": "4px"})]),
+                        ],
+                        style={"display": "grid", "gridTemplateColumns": "32px 1fr", "gap": "10px", "alignItems": "start"},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div("3", style={"backgroundColor": "#16a34a", "color": "white", "width": "28px", "height": "28px", "borderRadius": "50%", "display": "flex", "alignItems": "center", "justifyContent": "center", "fontWeight": "900"}),
+                            html.Div([html.Strong("Export or inspect"), html.Div("Download the full filtered list or copy a customer ID into Customer 360.", style={"color": COLORS["muted"], "fontSize": "13px", "marginTop": "4px"})]),
+                        ],
+                        style={"display": "grid", "gridTemplateColumns": "32px 1fr", "gap": "10px", "alignItems": "start"},
+                    ),
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "repeat(3, 1fr)",
+                    "gap": "12px",
+                    "backgroundColor": "#f8fafc",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "18px",
+                    "padding": "16px",
+                    "marginBottom": "18px",
+                },
             ),
             html.Div(
                 children=[
@@ -3704,7 +3736,7 @@ def create_customer_explorer_layout() -> html.Div:
             html.Div(
                 children=[
                     html.Button(
-                        "Download CSV",
+                        "Export CSV",
                         id="download-customer-explorer-csv-button",
                         n_clicks=0,
                         style={
@@ -3715,11 +3747,11 @@ def create_customer_explorer_layout() -> html.Div:
                             "padding": "10px 14px",
                             "fontWeight": "900",
                             "cursor": "pointer",
-                            "width": "150px",
+                            "width": "140px",
                         },
                     ),
                     html.Button(
-                        "Download Excel",
+                        "Export Excel",
                         id="download-customer-explorer-excel-button",
                         n_clicks=0,
                         style={
@@ -3730,7 +3762,7 @@ def create_customer_explorer_layout() -> html.Div:
                             "padding": "10px 14px",
                             "fontWeight": "900",
                             "cursor": "pointer",
-                            "width": "160px",
+                            "width": "150px",
                         },
                     ),
                     dcc.Download(id="download-customer-explorer-csv"),
@@ -3738,14 +3770,37 @@ def create_customer_explorer_layout() -> html.Div:
                 ],
                 style={"display": "flex", "gap": "10px", "marginBottom": "14px", "flexWrap": "wrap"},
             ),
+            html.Div(
+                children=[
+                    html.Strong("Preview only: "),
+                    "the table below is capped at 100 customers and hides email by default. CSV/Excel exports include the full filtered operational list.",
+                ],
+                style={
+                    "backgroundColor": "#eff6ff",
+                    "border": "1px solid #bfdbfe",
+                    "borderRadius": "14px",
+                    "padding": "12px 14px",
+                    "color": "#1e3a8a",
+                    "fontSize": "13px",
+                    "lineHeight": "1.45",
+                    "marginBottom": "12px",
+                },
+            ),
             dash_table.DataTable(
                 id="customer-explorer-table",
                 columns=[],
                 data=[],
-                page_size=15,
+                page_size=10,
                 sort_action="native",
                 filter_action="native",
-                style_table={"overflowX": "auto"},
+                fixed_rows={"headers": True},
+                style_table={
+                    "overflowX": "auto",
+                    "overflowY": "auto",
+                    "maxHeight": "520px",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "14px",
+                },
                 style_header={
                     "backgroundColor": "#f8fafc",
                     "fontWeight": "900",
@@ -3760,7 +3815,10 @@ def create_customer_explorer_layout() -> html.Div:
                     "whiteSpace": "normal",
                     "height": "auto",
                     "textAlign": "left",
-                    "minWidth": "90px",
+                    "minWidth": "110px",
+                    "maxWidth": "220px",
+                    "overflow": "hidden",
+                    "textOverflow": "ellipsis",
                 },
                 style_data_conditional=[
                     {"if": {"filter_query": '{Decision} = "Scale"'}, "backgroundColor": "#f0fdf4"},
@@ -6331,7 +6389,7 @@ def download_ab_customer_list(n_clicks, campaign_id, segment, audience_type, act
     if export_df.empty:
         raise PreventUpdate
 
-    export_df = format_customer_explorer_preview(export_df, limit=len(export_df))
+    export_df = format_customer_explorer_preview(export_df, limit=len(export_df), include_email=True)
     return dcc.send_data_frame(export_df.to_csv, "ab_customer_list.csv", index=False)
 
 
@@ -6446,7 +6504,7 @@ def update_customer_explorer(
         )
         return summary, [], []
 
-    preview_df = format_customer_explorer_preview(explorer_df, limit=250)
+    preview_df = format_customer_explorer_preview(explorer_df, limit=100)
 
     decision_counts = explorer_df["decision_status"].value_counts().to_dict() if "decision_status" in explorer_df.columns else {}
     scale_count = int(decision_counts.get("Scale", 0))
@@ -6457,7 +6515,7 @@ def update_customer_explorer(
     summary = html.Div(
         children=[
             create_kpi_card("Matched Customers", f"{len(explorer_df):,}", "Customers matching current filters", "#2563eb"),
-            create_kpi_card("Preview Rows", f"{len(preview_df):,}", "Rows shown in capped table preview", "#0ea5e9"),
+            create_kpi_card("Preview Rows", f"{len(preview_df):,}", "Preview only; export includes full filtered list", "#0ea5e9"),
             create_kpi_card("Scale / Test / Block", f"{scale_count:,} / {test_count:,} / {block_count:,}", "Decision split", "#7c3aed"),
             create_kpi_card("Do Not Launch", f"{do_not_launch_count:,}", "Customers not recommended for launch", "#9ca3af"),
         ],
