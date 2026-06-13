@@ -380,7 +380,8 @@ def create_table(rows) -> html.Table:
                             "borderBottom": f"1px solid {COLORS['border']}",
                             "color": COLORS["text"],
                             "verticalAlign": "top",
-                            "whiteSpace": "nowrap" if column not in ["Campaign"] else "normal",
+                            "whiteSpace": "normal" if column in ["Campaign", "Family", "Rollout"] else "nowrap",
+                            "maxWidth": "240px" if column in ["Campaign", "Family", "Rollout"] else "none",
                         },
                     )
                     for column in columns
@@ -407,71 +408,59 @@ def create_table(rows) -> html.Table:
 
 
 def create_campaign_table_rows(campaign_recommendations: pd.DataFrame, limit: int = 10) -> list[dict]:
-    """Build a compact dashboard table from campaign-level recommendation output."""
+    """Build a compact campaign audit table from campaign-level recommendation output."""
     if campaign_recommendations.empty:
         return []
 
-    required_columns = [
-        "dashboard_recommendation_rank",
-        "campaign_name",
-        "campaign_family",
-        "risk_level",
-        "recommended_rollout_decision",
-        "eligible_customers",
-        "scale_customers",
-        "blocked_customers",
-        "expected_campaign_profit",
-        "expected_campaign_roi",
-        "campaign_score",
-    ]
+    table = campaign_recommendations.copy()
 
-    missing_columns = [
-        column for column in required_columns
-        if column not in campaign_recommendations.columns
-    ]
+    fallback_columns = {
+        "dashboard_recommendation_rank": 0,
+        "campaign_name": "Unknown campaign",
+        "campaign_family": "Unknown family",
+        "risk_level": "Unknown",
+        "recommended_rollout_decision": "Review",
+        "eligible_customers": 0,
+        "scale_customers": 0,
+        "blocked_customers": 0,
+        "expected_campaign_profit": 0,
+        "expected_campaign_roi": 0,
+        "campaign_score": 0,
+    }
 
-    if missing_columns:
-        raise ValueError(
-            "Campaign recommendations missing required columns: "
-            + ", ".join(missing_columns)
-        )
+    for column, default in fallback_columns.items():
+        if column not in table.columns:
+            table[column] = default
 
-    table = campaign_recommendations.head(limit).copy()
+    table = table.head(limit).copy()
 
-    table["Expected Profit"] = table["expected_campaign_profit"].apply(format_currency)
-    table["Expected ROI"] = table["expected_campaign_roi"].apply(lambda value: f"{value:.2f}x")
-    table["Eligible Customers"] = table["eligible_customers"].apply(lambda value: f"{int(value):,}")
-    table["Scale Customers"] = table["scale_customers"].apply(lambda value: f"{int(value):,}")
-    table["Blocked Customers"] = table["blocked_customers"].apply(lambda value: f"{int(value):,}")
-    table["Score"] = table["campaign_score"].apply(lambda value: f"{value:.1f}")
+    table["Rank"] = table["dashboard_recommendation_rank"].apply(lambda value: str(int(float(value))) if str(value).replace(".", "", 1).isdigit() else str(value))
+    table["Campaign"] = table["campaign_name"].astype(str)
+    table["Family"] = table["campaign_family"].astype(str)
+    table["Rollout"] = table["recommended_rollout_decision"].astype(str)
+    table["Risk"] = table["risk_level"].astype(str)
+    table["Profit"] = pd.to_numeric(table["expected_campaign_profit"], errors="coerce").fillna(0).apply(format_currency)
+    table["ROI"] = pd.to_numeric(table["expected_campaign_roi"], errors="coerce").fillna(0).apply(lambda value: f"{value:.2f}x")
+    table["Matches"] = pd.to_numeric(table["eligible_customers"], errors="coerce").fillna(0).astype(int).astype(str)
+    table["Scale"] = pd.to_numeric(table["scale_customers"], errors="coerce").fillna(0).astype(int).astype(str)
+    table["Blocked"] = pd.to_numeric(table["blocked_customers"], errors="coerce").fillna(0).astype(int).astype(str)
+    table["Score"] = pd.to_numeric(table["campaign_score"], errors="coerce").fillna(0).apply(lambda value: f"{value:.1f}")
 
     return table[
         [
-            "dashboard_recommendation_rank",
-            "campaign_name",
-            "campaign_family",
-            "risk_level",
-            "recommended_rollout_decision",
-            "Eligible Customers",
-            "Scale Customers",
-            "Blocked Customers",
-            "Expected Profit",
-            "Expected ROI",
+            "Rank",
+            "Campaign",
+            "Family",
+            "Rollout",
+            "Risk",
+            "Profit",
+            "ROI",
+            "Matches",
+            "Scale",
+            "Blocked",
             "Score",
         ]
-    ].rename(
-        columns={
-            "dashboard_recommendation_rank": "Rank",
-            "campaign_name": "Campaign",
-            "campaign_family": "Family",
-            "risk_level": "Risk",
-            "recommended_rollout_decision": "Rollout",
-            "Eligible Customers": "Customer-Campaign Matches",
-            "Scale Customers": "Scale Matches",
-            "Blocked Customers": "Blocked Matches",
-        }
-    ).to_dict("records")
-
+    ].to_dict("records")
 
 customer_features, segment_summary, portfolio_kpis = load_data()
 campaign_library, campaign_recommendations = load_campaign_data()
@@ -894,6 +883,7 @@ def create_campaign_recommendation_card(row: pd.Series) -> html.Div:
         "Scale": "#16a34a",
         "Test": "#7c3aed",
         "Constrain": "#f97316",
+        "Controlled Servicing": "#0ea5e9",
         "Do Not Launch": "#64748b",
         "Block": "#dc2626",
     }
@@ -960,7 +950,23 @@ def create_campaign_recommendation_card(row: pd.Series) -> html.Div:
                     "fontSize": "13px",
                     "lineHeight": "1.5",
                     "color": COLORS["muted"],
-                    "margin": "0 0 14px 0",
+                    "margin": "0 0 10px 0",
+                },
+            ),
+            html.Div(
+                children=[
+                    html.Strong("Active rollout logic: "),
+                    row.get("active_rollout_reason", "Rollout is inferred from the active master dataset."),
+                ],
+                style={
+                    "fontSize": "12px",
+                    "lineHeight": "1.45",
+                    "color": "#1e3a8a",
+                    "backgroundColor": "#eff6ff",
+                    "border": "1px solid #bfdbfe",
+                    "borderRadius": "10px",
+                    "padding": "9px 10px",
+                    "marginBottom": "14px",
                 },
             ),
             html.Div(
@@ -1087,6 +1093,46 @@ def create_campaign_detail_panel(campaign_recommendations: pd.DataFrame) -> html
             ),
             html.Div(
                 children=[
+                    create_metric_chip("Active Matches", format_large_number(top_campaign.get("eligible_customers", 0))),
+                    create_metric_chip("Scale / Blocked", f"{int(top_campaign.get('scale_customers', 0))} / {int(top_campaign.get('blocked_customers', 0))}"),
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "1fr 1fr",
+                    "gap": "12px",
+                    "marginBottom": "12px",
+                },
+            ),
+            html.Div(
+                children=[
+                    html.Div(
+                        "Active Rollout Logic",
+                        style={
+                            "fontSize": "13px",
+                            "fontWeight": "900",
+                            "color": "#1e3a8a",
+                            "marginBottom": "6px",
+                        },
+                    ),
+                    html.Div(
+                        top_campaign.get("active_rollout_reason", "Rollout is inferred from active customer matches and guardrails."),
+                        style={
+                            "fontSize": "13px",
+                            "lineHeight": "1.5",
+                            "color": "#1e3a8a",
+                        },
+                    ),
+                ],
+                style={
+                    "backgroundColor": "#eff6ff",
+                    "border": "1px solid #bfdbfe",
+                    "borderRadius": "14px",
+                    "padding": "14px",
+                    "marginBottom": "12px",
+                },
+            ),
+            html.Div(
+                children=[
                     html.Div(
                         "Guardrail Notes",
                         style={
@@ -1129,6 +1175,7 @@ def create_color_legend() -> html.Details:
         ("Scale", "#16a34a", "Ready for broader rollout when economics and risk are acceptable."),
         ("Test", "#2563eb", "Run a controlled experiment before scaling."),
         ("Constrain", "#f97316", "Potential opportunity, but rollout should be limited by risk or uncertainty."),
+        ("Controlled Servicing", "#0ea5e9", "Servicing or protective campaign; avoid aggressive growth framing."),
         ("Block", "#dc2626", "Do not target because guardrails or risk rules are triggered."),
         ("Do Not Launch", "#9ca3af", "Not enough upside or not a strong campaign fit."),
     ]
@@ -4348,7 +4395,7 @@ app.layout = html.Div(
                                 ),
                                 create_chart_card(
                                     "Rollout Recommendation Mix",
-                                    "How top campaigns split across Scale, Test, and Constrain decisions.",
+                                    "How top campaigns split across active rollout recommendations.",
                                     campaign_rollout_fig,
                                     "campaign-rollout-mix-chart",
                                 ),
@@ -4385,7 +4432,7 @@ app.layout = html.Div(
                                     ],
                                     style={
                                         "display": "grid",
-                                        "gridTemplateColumns": "repeat(2, 1fr)",
+                                        "gridTemplateColumns": "repeat(auto-fit, minmax(440px, 1fr))",
                                         "gap": "16px",
                                     },
                                 ),
@@ -4397,14 +4444,27 @@ app.layout = html.Div(
                                 html.Div(
                                     children=[
                                         html.H3(
-                                            "Campaign Opportunity Table",
+                                            "Campaign Audit Table",
                                             style={
-                                                "margin": "0 0 14px 0",
+                                                "margin": "0 0 6px 0",
                                                 "fontSize": "20px",
                                                 "fontWeight": "900",
                                             },
                                         ),
-                                        html.Div(id="campaign-table-container", children=create_table(campaign_table_rows)),
+                                        html.P(
+                                            "Compact audit view of the top campaign opportunities. Matches can include servicing/protective audiences; Scale and Blocked columns show the active customer decision mix behind each campaign.",
+                                            style={
+                                                "margin": "0 0 14px 0",
+                                                "fontSize": "13px",
+                                                "color": COLORS["muted"],
+                                                "lineHeight": "1.45",
+                                            },
+                                        ),
+                                        html.Div(
+                                            id="campaign-table-container",
+                                            children=create_table(campaign_table_rows),
+                                            style={"overflowX": "auto"},
+                                        ),
                                     ],
                                     style={
                                         "backgroundColor": COLORS["card"],
@@ -4412,17 +4472,15 @@ app.layout = html.Div(
                                         "borderRadius": "18px",
                                         "padding": "20px",
                                         "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
-                                        "overflowX": "auto",
                                     },
                                 ),
-                                html.Div(id="campaign-detail-container", children=create_campaign_detail_panel(campaign_recommendations)),
+                                html.Div(
+                                    id="campaign-detail-container",
+                                    children=create_campaign_detail_panel(campaign_recommendations),
+                                    style={"marginTop": "18px"},
+                                ),
                             ],
-                            style={
-                                "display": "grid",
-                                "gridTemplateColumns": "1.35fr 0.85fr",
-                                "gap": "18px",
-                                "marginTop": "18px",
-                            },
+                            style={"marginTop": "18px"},
                         ),
                         create_insight_card(
                             "Why this page matters",
@@ -6653,6 +6711,52 @@ def calculate_campaign_economics_from_customers(campaign_dict: dict, eligible_df
 
 
 
+
+def infer_active_campaign_rollout(campaign_dict: dict, audience_df: pd.DataFrame, eligible_df: pd.DataFrame, scale_df: pd.DataFrame, blocked_df: pd.DataFrame) -> tuple[str, str]:
+    """Infer campaign rollout from active customer decisions, not static campaign-library labels."""
+    eligible_count = int(len(eligible_df)) if eligible_df is not None else 0
+    scale_count = int(len(scale_df)) if scale_df is not None else 0
+    blocked_count = int(len(blocked_df)) if blocked_df is not None else 0
+    audience_count = int(len(audience_df)) if audience_df is not None else 0
+
+    family = str(campaign_dict.get("campaign_family", "")).lower()
+    risk_level = str(campaign_dict.get("risk_level", "")).lower()
+    campaign_name = str(campaign_dict.get("campaign_name", campaign_dict.get("campaign", ""))).lower()
+
+    servicing_family = any(term in family for term in ["servicing", "enrollment", "balance health", "account health"])
+    protective_campaign = any(term in campaign_name for term in ["payment", "autopay", "paperless", "fraud", "account health", "balance health", "alert"])
+
+    if eligible_count <= 0:
+        return "Do Not Launch", "No active customers match the campaign audience after guardrails."
+
+    if scale_count > 0 and blocked_count == 0 and scale_count == eligible_count:
+        return "Scale", "All matched active customers are Scale-ready and no blocked customers are in the campaign audience."
+
+    if servicing_family or protective_campaign:
+        if blocked_count > 0:
+            return "Controlled Servicing", "This is a servicing/protective campaign, but the audience includes blocked or high-risk customers, so use controlled servicing language and avoid growth framing."
+        if scale_count == 0:
+            return "Test", "Matched customers are eligible but not Scale-ready; use a controlled test or servicing pilot."
+        return "Controlled Servicing", "Campaign is servicing/protective; rollout should focus on risk prevention and customer support rather than aggressive growth."
+
+    if blocked_count > 0 and audience_count > 0:
+        blocked_share = blocked_count / max(audience_count, 1)
+        if blocked_share >= 0.25:
+            return "Constrain", "Audience includes meaningful blocked/risky customers; limit rollout and review guardrails before launch."
+
+    if scale_count == 0:
+        return "Test", "Matched active customers are eligible but none are Scale-ready, so broad rollout is not justified."
+
+    if scale_count < eligible_count:
+        return "Test", "Audience mixes Scale and Test customers; validate with an experiment before broader rollout."
+
+    if "high" in risk_level or "protective" in risk_level:
+        return "Constrain", "Campaign has elevated risk/protective posture, so rollout should be limited."
+
+    return "Test", "Defaulting to controlled test because active data does not support a full Scale recommendation."
+
+
+
 def build_active_campaign_recommendations(master_df: pd.DataFrame) -> pd.DataFrame:
     """Recalculate campaign recommendation counts and economics from the active master dataset."""
     if campaign_recommendations.empty or master_df is None or master_df.empty:
@@ -6691,6 +6795,19 @@ def build_active_campaign_recommendations(master_df: pd.DataFrame) -> pd.DataFra
             campaign_dict,
             eligible_df,
         )
+
+        active_rollout, active_rollout_reason = infer_active_campaign_rollout(
+            campaign_dict,
+            audience_df,
+            eligible_df,
+            scale_df,
+            blocked_df,
+        )
+
+        campaign_dict["recommended_rollout_decision"] = active_rollout
+        campaign_dict["rollout_recommendation"] = active_rollout
+        campaign_dict["recommended_rollout"] = active_rollout
+        campaign_dict["active_rollout_reason"] = active_rollout_reason
 
         campaign_dict["eligible_customers"] = eligible_customers
         campaign_dict["scale_customers"] = scale_customers
