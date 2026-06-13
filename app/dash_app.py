@@ -465,7 +465,6 @@ def create_campaign_table_rows(campaign_recommendations: pd.DataFrame, limit: in
             "Scale",
             "Test",
             "Blocked",
-            "Score",
         ]
     ].to_dict("records")
 
@@ -1083,23 +1082,23 @@ def create_campaign_recommendation_card(row: pd.Series, master_df: pd.DataFrame 
             html.Div(
                 children=[
                     html.Div(
-                        "Download matched customer audience",
+                        "Export matched audience",
                         style={"fontWeight": "900", "fontSize": "13px", "marginBottom": "8px", "color": COLORS["text"]},
                     ),
                     html.Div(
-                        "Export includes campaign details, customer profile, risk band, decision status, ROI, profit, and audience status.",
+                        "Download the full matched customer list with campaign, decision, risk, ROI, profit, and audience status fields.",
                         style={"fontSize": "12px", "lineHeight": "1.4", "color": COLORS["muted"], "marginBottom": "10px"},
                     ),
                     html.Div(
                         children=[
                             html.Button(
-                                "Download CSV",
+                                "Export CSV",
                                 id={"type": "campaign-audience-download-button", "campaign_key": campaign_key, "file_type": "csv"},
                                 n_clicks=0,
                                 style={**button_style, "backgroundColor": "#2563eb"},
                             ),
                             html.Button(
-                                "Download Excel",
+                                "Export Excel",
                                 id={"type": "campaign-audience-download-button", "campaign_key": campaign_key, "file_type": "excel"},
                                 n_clicks=0,
                                 style={**button_style, "backgroundColor": "#16a34a"},
@@ -1121,8 +1120,8 @@ def create_campaign_recommendation_card(row: pd.Series, master_df: pd.DataFrame 
 
             html.Div(
                 children=[
-                    html.Strong("Audience preview: "),
-                    "Use the Campaign Audience Workbench below to filter matched customers and review a preview before downloading the full list.",
+                    html.Strong("Audience review: "),
+                    "Use Decision Workbench > Audience Explorer to filter Scale/Test/Blocked customers before execution. Card exports download the full matched audience.",
                 ],
                 style={
                     "backgroundColor": "#f8fafc",
@@ -1178,7 +1177,6 @@ def create_campaign_table_rows(campaign_recommendations: pd.DataFrame, limit: in
             "Blocked Customers",
             "Expected Profit",
             "Expected ROI",
-            "Score",
         ]
     ].rename(
         columns={
@@ -4827,7 +4825,7 @@ app.layout = html.Div(
                                     id="campaign-top-cards-container",
                                     children=[
                                         create_campaign_recommendation_card(row)
-                                        for _, row in campaign_top10.iterrows()
+                                        for _, row in campaign_top10.head(6).iterrows()
                                     ],
                                     style={
                                         "display": "grid",
@@ -4851,7 +4849,7 @@ app.layout = html.Div(
                                             },
                                         ),
                                         html.P(
-                                            "Compact audit view of the top campaign opportunities. Matches can include servicing/protective audiences; Scale, Test, and Blocked columns show the active customer decision mix behind each campaign.",
+                                            "Ranked audit view of the top 10 campaign opportunities. Matches are customer-campaign matches; Scale, Test, and Blocked show the active decision mix behind each campaign.",
                                             style={
                                                 "margin": "0 0 14px 0",
                                                 "fontSize": "13px",
@@ -4862,7 +4860,13 @@ app.layout = html.Div(
                                         html.Div(
                                             id="campaign-table-container",
                                             children=create_table(campaign_table_rows),
-                                            style={"overflowX": "auto"},
+                                            style={
+                                                "overflowX": "auto",
+                                                "overflowY": "auto",
+                                                "maxHeight": "520px",
+                                                "border": f"1px solid {COLORS['border']}",
+                                                "borderRadius": "14px",
+                                            },
                                         ),
                                     ],
                                     style={
@@ -7381,7 +7385,7 @@ def update_campaigns_from_active_master(active_data):
         html.Div(
             children=[
                 html.Strong("How to read this section: "),
-                "this page ranks campaign opportunities. One customer can qualify for multiple campaigns, so campaign-level counts are customer-campaign matches, not unique customer counts.",
+                "cards show the top 6 campaign opportunities for quick decisioning. The audit table below keeps the top 10 ranked campaigns. One customer can qualify for multiple campaigns, so counts are customer-campaign matches, not unique customer counts.",
             ],
             style={
                 "gridColumn": "1 / -1",
@@ -7394,8 +7398,8 @@ def update_campaigns_from_active_master(active_data):
             },
         )
     ] + [
-        create_campaign_recommendation_card(row, master_df)
-        for _, row in top10.iterrows()
+        create_campaign_recommendation_card(row)
+        for _, row in top10.head(6).iterrows()
     ]
 
     try:
@@ -7414,6 +7418,7 @@ def update_campaigns_from_active_master(active_data):
             row["Test"] = row.pop("Test Customers")
         if "Blocked Customers" in row:
             row["Blocked"] = row.pop("Blocked Customers")
+        row.pop("Score", None)
         cleaned_table_rows.append(row)
 
     table = create_table(cleaned_table_rows)
