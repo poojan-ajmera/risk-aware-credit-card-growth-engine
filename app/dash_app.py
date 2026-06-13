@@ -1,13 +1,22 @@
 from __future__ import annotations
 
+import sys
+
 from pathlib import Path
+
+APP_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = APP_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.decision_engine import score_customer_portfolio
 import base64
 import io
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, callback_context, dcc, html, dash_table
+from dash import Dash, Input, Output, State, callback_context, dcc, html, dash_table, no_update
 from dash.exceptions import PreventUpdate
 
 
@@ -457,6 +466,9 @@ def create_campaign_table_rows(campaign_recommendations: pd.DataFrame, limit: in
             "campaign_family": "Family",
             "risk_level": "Risk",
             "recommended_rollout_decision": "Rollout",
+            "Eligible Customers": "Customer-Campaign Matches",
+            "Scale Customers": "Scale Matches",
+            "Blocked Customers": "Blocked Matches",
         }
     ).to_dict("records")
 
@@ -893,7 +905,7 @@ def create_campaign_recommendation_card(row: pd.Series) -> html.Div:
             html.Div(
                 children=[
                     html.Div(
-                        f"#{int(row.get('dashboard_recommendation_rank', 0))}",
+                        f"#{int(row.get('rank', row.get('dashboard_recommendation_rank', 0)))}",
                         style={
                             "fontSize": "13px",
                             "fontWeight": "900",
@@ -953,8 +965,8 @@ def create_campaign_recommendation_card(row: pd.Series) -> html.Div:
             ),
             html.Div(
                 children=[
-                    create_metric_chip("Eligible", format_large_number(row.get("eligible_customers", 0))),
-                    create_metric_chip("Scale", format_large_number(row.get("scale_customers", 0))),
+                    create_metric_chip("Matches", format_large_number(row.get("eligible_customers", 0))),
+                    create_metric_chip("Scale Matches", format_large_number(row.get("scale_customers", 0))),
                     create_metric_chip("Profit", format_currency(row.get("expected_campaign_profit", 0))),
                     create_metric_chip("ROI", f"{row.get('expected_campaign_roi', 0):.2f}x"),
                 ],
@@ -2497,11 +2509,13 @@ def create_data_source_center() -> html.Details:
                                 style={"fontSize": "12px", "fontWeight": "900", "color": COLORS["muted"], "textTransform": "uppercase"},
                             ),
                             html.H3(
-                                "Synthetic demo portfolio",
+                                id="data-source-mode-title",
+                                children="Synthetic demo portfolio",
                                 style={"margin": "6px 0 8px 0", "fontSize": "22px", "fontWeight": "900"},
                             ),
                             html.P(
-                                "The dashboard is currently powered by the built-in synthetic customer portfolio. Upload validation is now available, and full upload-to-dashboard switching will be connected next.",
+                                id="data-source-mode-description",
+                                children="The dashboard is currently powered by the built-in synthetic customer portfolio. Upload a valid CSV or Excel file to replace the active master dataset.",
                                 style={"margin": "0", "color": COLORS["muted"], "lineHeight": "1.5"},
                             ),
                         ],
@@ -2662,10 +2676,10 @@ def create_data_source_center() -> html.Details:
             ),
             html.Div(
                 children=[
-                    html.Strong("Next build step: "),
-                    "validated uploaded files will be scored through the decision engine, stored as the active dataset, and used to refresh every KPI, chart, table, scenario, A/B planner, export, guardrail, and playbook section.",
+                    html.Strong("Active master data: "),
+                    "uploaded files are validated, scored through the decision engine, and stored as the active master dataset. Core dashboard views now refresh from this active dataset; campaign-level modules are being checked for final consistency.",
                 ],
-                title="This explains the next development step and why this section is currently validation-only.",
+                title="This explains how uploaded files are used as the active dashboard dataset.",
                 style={
                     "marginTop": "16px",
                     "backgroundColor": "#fff7ed",
@@ -4026,7 +4040,7 @@ def build_ab_test_planner_layout() -> html.Div:
                             dcc.Dropdown(
                                 id="ab-segment",
                                 options=segment_options,
-                                value="High-Utilization Revolver",
+                                value="All Segments",
                                 clearable=False,
                                 style={"marginBottom": "18px"},
                             ),
@@ -4129,123 +4143,50 @@ def build_ab_test_planner_layout() -> html.Div:
 
 
 
-def get_campaign_audience_df(campaign_id: str, segment: str, audience_type: str) -> pd.DataFrame:
-    """Return a campaign-level customer audience preview/export list.
 
-    This uses campaign target/exclusion segments and guardrails from the campaign
-    library. In production, this logic should run against a warehouse or scoring
-    table, not inside the browser.
-    """
-    audience_df = customer_features.copy()
+def get_campaign_audience_df(
+    campaign_id,
+    segment="All Segments",
+    audience_type="Eligible",
+    source_df: pd.DataFrame | None = None,
+):
+    """Build campaign audience from the current master dataset, not only synthetic data."""
+    audience_df = source_df.copy() if source_df is not None else customer_features.copy()
 
-    selected_recommendation = pd.Series(dtype="object")
-    selected_library_row = pd.Series(dtype="object")
-
-    if not campaign_recommendations.empty and campaign_id not in [None, "None"]:
-        recommendation_match = campaign_recommendations[
+    if campaign_id and campaign_id != "None" and not campaign_recommendations.empty:
+        campaign_match = campaign_recommendations[
             campaign_recommendations["campaign_id"] == campaign_id
         ]
-        if not recommendation_match.empty:
-            selected_recommendation = recommendation_match.iloc[0]
 
-    if not campaign_library.empty and campaign_id not in [None, "None"]:
-        library_match = campaign_library[campaign_library["campaign_id"] == campaign_id]
-        if not library_match.empty:
-            selected_library_row = library_match.iloc[0]
+        if not campaign_match.empty:
+            selected_campaign = campaign_match.iloc[0]
+            target_segments = split_semicolon_values(selected_campaign.get("target_segments", ""))
+            excluded_segments = split_semicolon_values(selected_campaign.get("excluded_segments", ""))
 
-    target_segments = split_semicolon_values(selected_recommendation.get("target_segments", ""))
-    excluded_segments = split_semicolon_values(selected_recommendation.get("excluded_segments", ""))
+            if target_segments and "customer_segment" in audience_df.columns:
+                audience_df = audience_df[
+                    audience_df["customer_segment"].isin(target_segments)
+                ].copy()
 
-    if target_segments:
-        audience_df = audience_df[audience_df["customer_segment"].isin(target_segments)].copy()
+            if excluded_segments and "customer_segment" in audience_df.columns:
+                audience_df = audience_df[
+                    ~audience_df["customer_segment"].isin(excluded_segments)
+                ].copy()
 
-    if excluded_segments:
-        audience_df = audience_df[~audience_df["customer_segment"].isin(excluded_segments)].copy()
-
-    if segment != "All Segments":
+    if segment and segment != "All Segments" and "customer_segment" in audience_df.columns:
         audience_df = audience_df[audience_df["customer_segment"] == segment].copy()
 
-    max_default_probability = float(selected_library_row.get("max_default_probability", 0.20))
-    max_utilization = float(selected_library_row.get("max_utilization", 1.00))
-    min_credit_score = int(selected_library_row.get("min_credit_score", 0))
-    risk_sensitivity = selected_library_row.get("risk_sensitivity", "Medium")
+    if audience_type == "Eligible" and "decision_status" in audience_df.columns:
+        audience_df = audience_df[audience_df["decision_status"].isin(["Scale", "Test"])].copy()
+    elif audience_type == "Scale" and "decision_status" in audience_df.columns:
+        audience_df = audience_df[audience_df["decision_status"] == "Scale"].copy()
+    elif audience_type == "Test" and "decision_status" in audience_df.columns:
+        audience_df = audience_df[audience_df["decision_status"] == "Test"].copy()
+    elif audience_type == "Blocked" and "decision_status" in audience_df.columns:
+        audience_df = audience_df[audience_df["decision_status"] == "Block"].copy()
 
-    guardrail_pass = (
-        (audience_df["default_probability"] <= max_default_probability)
-        & (audience_df["utilization_rate"] <= max_utilization)
-        & (audience_df["credit_score"] >= min_credit_score)
-        & (audience_df["risk_band"] != "Very High Risk")
-    )
+    return audience_df.copy()
 
-    if risk_sensitivity in ["High", "Very High"]:
-        guardrail_pass = (
-            guardrail_pass
-            & (audience_df["late_payments_12m"] == 0)
-            & (audience_df["risk_adjusted_profit"] >= 0)
-        )
-
-    audience_df["campaign_audience_status"] = "Eligible"
-    audience_df.loc[~guardrail_pass, "campaign_audience_status"] = "Blocked"
-
-    audience_df["campaign_test_group"] = "Holdout"
-    eligible_index = audience_df[audience_df["campaign_audience_status"] == "Eligible"].index
-    half_point = len(eligible_index) // 2
-
-    audience_df.loc[eligible_index[:half_point], "campaign_test_group"] = "Control"
-    audience_df.loc[eligible_index[half_point:], "campaign_test_group"] = "Treatment"
-
-    audience_df["campaign_customer_action"] = "Test"
-    audience_df.loc[
-        (audience_df["campaign_audience_status"] == "Eligible")
-        & (audience_df["decision_status"] == "Scale"),
-        "campaign_customer_action",
-    ] = "Scale"
-
-    audience_df.loc[
-        audience_df["campaign_audience_status"] == "Blocked",
-        "campaign_customer_action",
-    ] = "Blocked"
-
-    if audience_type == "Scale":
-        audience_df = audience_df[audience_df["campaign_customer_action"] == "Scale"].copy()
-    elif audience_type == "Test":
-        audience_df = audience_df[audience_df["campaign_customer_action"] == "Test"].copy()
-    elif audience_type == "Blocked":
-        audience_df = audience_df[audience_df["campaign_customer_action"] == "Blocked"].copy()
-    else:
-        audience_df = audience_df[audience_df["campaign_audience_status"] == "Eligible"].copy()
-
-    selected_columns = [
-        "customer_id",
-        "customer_name",
-        "customer_email",
-        "city",
-        "state",
-        "customer_segment",
-        "risk_band",
-        "decision_status",
-        "campaign_customer_action",
-        "campaign_test_group",
-        "credit_score",
-        "utilization_rate",
-        "default_probability",
-        "monthly_spend",
-        "risk_adjusted_profit",
-        "expected_roi",
-        "preferred_channel",
-        "card_type",
-        "rewards_preference",
-    ]
-
-    existing_columns = [column for column in selected_columns if column in audience_df.columns]
-    audience_df = audience_df[existing_columns].copy()
-
-    audience_df = audience_df.sort_values(
-        ["campaign_customer_action", "risk_adjusted_profit", "expected_roi"],
-        ascending=[True, False, False],
-    )
-
-    return audience_df
 
 
 def build_customer_export_preview_rows(df: pd.DataFrame, limit: int = 25) -> list[dict]:
@@ -4333,6 +4274,8 @@ selected_tab_style = {
 
 app.layout = html.Div(
     children=[
+        dcc.Store(id="active-customer-data-store", storage_type="memory"),
+        dcc.Store(id="active-data-mode-store", storage_type="memory", data={"mode": "synthetic", "rows": 0, "filename": "synthetic_demo_portfolio"}),
         html.Div(
             children=[
                 html.Div(
@@ -4400,6 +4343,7 @@ app.layout = html.Div(
         ),
 
         html.Div(
+                        id="top-kpi-container",
             children=[
                 create_kpi_card("Total Customers", f"{int(kpis['total_customers']):,}", "Existing customers analyzed", "#2563eb"),
                 create_kpi_card("Monthly Spend", format_currency(kpis["total_monthly_spend"]), "Total card portfolio spend", "#0ea5e9"),
@@ -4483,7 +4427,7 @@ app.layout = html.Div(
                         html.Div(
                             children=[
                                 html.H3("Priority Segment Table", style={"margin": "0 0 14px 0", "fontSize": "20px", "fontWeight": "800"}),
-                                create_table(priority_rows),
+                                html.Div(id="priority-segment-table-container", children=create_table(priority_rows)),
                             ],
                             style={
                                 "backgroundColor": COLORS["card"],
@@ -4513,6 +4457,7 @@ app.layout = html.Div(
                         ),
                         create_campaigns_action_panel(),
                         html.Div(
+                            id="campaign-kpi-container",
                             children=[
                                 create_kpi_card(
                                     "Campaign Templates",
@@ -4579,7 +4524,7 @@ app.layout = html.Div(
                         html.Div(
                             children=[
                                 html.H3(
-                                    "Top Recommended Campaigns",
+                                    "Top Active Campaign Opportunities",
                                     style={
                                         "margin": "0 0 14px 0",
                                         "fontSize": "20px",
@@ -4587,6 +4532,7 @@ app.layout = html.Div(
                                     },
                                 ),
                                 html.Div(
+                                    id="campaign-top-cards-container",
                                     children=[
                                         create_campaign_recommendation_card(row)
                                         for _, row in campaign_top10.iterrows()
@@ -4605,14 +4551,14 @@ app.layout = html.Div(
                                 html.Div(
                                     children=[
                                         html.H3(
-                                            "Campaign Recommendation Table",
+                                            "Campaign Opportunity Table",
                                             style={
                                                 "margin": "0 0 14px 0",
                                                 "fontSize": "20px",
                                                 "fontWeight": "900",
                                             },
                                         ),
-                                        create_table(campaign_table_rows),
+                                        html.Div(id="campaign-table-container", children=create_table(campaign_table_rows)),
                                     ],
                                     style={
                                         "backgroundColor": COLORS["card"],
@@ -4623,7 +4569,7 @@ app.layout = html.Div(
                                         "overflowX": "auto",
                                     },
                                 ),
-                                create_campaign_detail_panel(campaign_recommendations),
+                                html.Div(id="campaign-detail-container", children=create_campaign_detail_panel(campaign_recommendations)),
                             ],
                             style={
                                 "display": "grid",
@@ -4756,322 +4702,31 @@ def apply_view_label_to_figure(fig, view_label: str):
 
 
 
-def apply_global_filters(selected_segments, selected_decisions, selected_risks, selected_actions) -> pd.DataFrame:
-    filtered = customer_features.copy()
 
-    if selected_segments:
+def apply_global_filters(
+    selected_segments,
+    selected_decisions,
+    selected_risks,
+    selected_actions,
+    source_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Apply global dashboard filters to either uploaded active data or synthetic data."""
+    filtered = source_df.copy() if source_df is not None else customer_features.copy()
+
+    if selected_segments and "customer_segment" in filtered.columns:
         filtered = filtered[filtered["customer_segment"].isin(selected_segments)]
 
-    if selected_decisions:
+    if selected_decisions and "decision_status" in filtered.columns:
         filtered = filtered[filtered["decision_status"].isin(selected_decisions)]
 
-    if selected_risks:
+    if selected_risks and "risk_band" in filtered.columns:
         filtered = filtered[filtered["risk_band"].isin(selected_risks)]
 
-    if selected_actions:
+    if selected_actions and "recommended_action" in filtered.columns:
         filtered = filtered[filtered["recommended_action"].isin(selected_actions)]
 
     return filtered
 
-
-
-
-def build_decision_share_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Decision Status Share")
-
-    counts = df["decision_status"].value_counts().reset_index()
-    counts.columns = ["decision_status", "customer_count"]
-
-    fig = px.pie(
-        counts,
-        names="decision_status",
-        values="customer_count",
-        hole=0.45,
-        title="Decision Status Share",
-        color="decision_status",
-        color_discrete_map=DECISION_COLOR_MAP,
-    )
-    fig.update_layout(
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(family="Arial", size=13, color="#111827"),
-        margin=dict(l=30, r=30, t=60, b=30),
-        legend_title_text="Decision",
-    )
-    return fig
-
-
-def build_decision_count_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Decision Status Count")
-
-    counts = df["decision_status"].value_counts().reset_index()
-    counts.columns = ["decision_status", "customer_count"]
-
-    fig = px.bar(
-        counts,
-        x="decision_status",
-        y="customer_count",
-        text="customer_count",
-        title="Decision Status Count",
-        color="decision_status",
-        color_discrete_map=DECISION_COLOR_MAP,
-    )
-    fig.update_traces(texttemplate="%{text:,}", textposition="outside")
-    fig.update_layout(
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(family="Arial", size=13, color="#111827"),
-        margin=dict(l=40, r=30, t=60, b=50),
-        showlegend=False,
-        xaxis_title="Decision",
-        yaxis_title="Customers",
-    )
-    return fig
-
-
-def build_segment_size_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Segment Size")
-
-    counts = df["customer_segment"].value_counts().reset_index()
-    counts.columns = ["customer_segment", "customer_count"]
-
-    fig = px.bar(
-        counts.sort_values("customer_count", ascending=True),
-        x="customer_count",
-        y="customer_segment",
-        orientation="h",
-        text="customer_count",
-        title="Segment Size",
-    )
-    fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#2563eb")
-    fig.update_layout(
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(family="Arial", size=13, color="#111827"),
-        margin=dict(l=160, r=40, t=60, b=40),
-        xaxis_title="Customers",
-        yaxis_title="Segment",
-    )
-    return fig
-
-
-def build_segment_eligibility_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Eligibility Rate")
-
-    summary = (
-        df.assign(eligible=df["decision_status"].isin(["Scale", "Test"]).astype(int))
-        .groupby("customer_segment", as_index=False)
-        .agg(eligible_rate=("eligible", "mean"), customer_count=("customer_id", "count"))
-    )
-    summary["eligible_rate_pct"] = summary["eligible_rate"] * 100
-
-    fig = px.bar(
-        summary.sort_values("eligible_rate_pct", ascending=True),
-        x="eligible_rate_pct",
-        y="customer_segment",
-        orientation="h",
-        text="eligible_rate_pct",
-        title="Eligibility Rate",
-    )
-    fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside", marker_color="#7c3aed")
-    fig.update_layout(
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(family="Arial", size=13, color="#111827"),
-        margin=dict(l=160, r=40, t=60, b=40),
-        xaxis_title="Eligible rate",
-        yaxis_title="Segment",
-    )
-    return fig
-
-
-def build_segment_decision_mix_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Segment Decision Mix")
-
-    mix = (
-        df.groupby(["customer_segment", "decision_status"])
-        .size()
-        .reset_index(name="customer_count")
-    )
-
-    fig = px.bar(
-        mix,
-        x="customer_segment",
-        y="customer_count",
-        color="decision_status",
-        title="Segment Decision Mix",
-        color_discrete_map=DECISION_COLOR_MAP,
-    )
-    fig.update_layout(
-        barmode="stack",
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(family="Arial", size=13, color="#111827"),
-        margin=dict(l=40, r=30, t=60, b=100),
-        xaxis_title="Segment",
-        yaxis_title="Customers",
-        legend_title_text="Decision",
-    )
-    return fig
-
-
-def build_action_mix_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Recommended Action Mix")
-
-    counts = df["recommended_action"].value_counts().reset_index()
-    counts.columns = ["recommended_action", "customer_count"]
-
-    fig = px.pie(
-        counts,
-        names="recommended_action",
-        values="customer_count",
-        hole=0.45,
-        title="Recommended Action Mix",
-    )
-    fig.update_layout(
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(family="Arial", size=13, color="#111827"),
-        margin=dict(l=30, r=30, t=60, b=30),
-        legend_title_text="Action",
-    )
-    return fig
-
-
-def build_offer_type_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Offer Type Distribution")
-
-    counts = df["offer_type"].value_counts().reset_index()
-    counts.columns = ["offer_type", "customer_count"]
-
-    fig = px.bar(
-        counts.sort_values("customer_count", ascending=True),
-        x="customer_count",
-        y="offer_type",
-        orientation="h",
-        text="customer_count",
-        title="Offer Type Distribution",
-    )
-    fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#7c3aed")
-    fig.update_layout(
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(family="Arial", size=13, color="#111827"),
-        margin=dict(l=170, r=40, t=60, b=40),
-        xaxis_title="Customers",
-        yaxis_title="Offer Type",
-    )
-    return fig
-
-
-def build_risk_band_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Risk Band Distribution")
-
-    counts = df["risk_band"].value_counts().reset_index()
-    counts.columns = ["risk_band", "customer_count"]
-
-    fig = px.pie(
-        counts,
-        names="risk_band",
-        values="customer_count",
-        hole=0.45,
-        title="Risk Band Distribution",
-        color="risk_band",
-        color_discrete_map=RISK_COLOR_MAP,
-    )
-    fig.update_layout(
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(family="Arial", size=13, color="#111827"),
-        margin=dict(l=30, r=30, t=60, b=30),
-        legend_title_text="Risk Band",
-    )
-    return fig
-
-
-def build_high_util_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("High-Utilization Revolver Mix")
-
-    subset = df[df["customer_segment"] == "High-Utilization Revolver"]
-
-    if subset.empty:
-        return empty_figure("High-Utilization Revolver Mix", "No high-utilization revolvers match the selected filters")
-
-    counts = subset["decision_status"].value_counts().reset_index()
-    counts.columns = ["decision_status", "customer_count"]
-
-    fig = px.bar(
-        counts,
-        x="decision_status",
-        y="customer_count",
-        text="customer_count",
-        title="High-Utilization Revolver Mix",
-        color="decision_status",
-        color_discrete_map=DECISION_COLOR_MAP,
-    )
-    fig.update_traces(texttemplate="%{text:,}", textposition="outside")
-    fig.update_layout(
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(family="Arial", size=13, color="#111827"),
-        margin=dict(l=40, r=30, t=60, b=50),
-        showlegend=False,
-        xaxis_title="Decision",
-        yaxis_title="Customers",
-    )
-    return fig
-
-
-def build_blocked_segment_fig(df: pd.DataFrame):
-    if df.empty:
-        return empty_figure("Blocked Customers by Segment")
-
-    blocked = df[df["decision_status"] == "Block"]
-
-    if blocked.empty:
-        return empty_figure("Blocked Customers by Segment", "No blocked customers match the selected filters")
-
-    counts = blocked["customer_segment"].value_counts().reset_index()
-    counts.columns = ["customer_segment", "customer_count"]
-
-    fig = px.bar(
-        counts.sort_values("customer_count", ascending=True),
-        x="customer_count",
-        y="customer_segment",
-        orientation="h",
-        text="customer_count",
-        title="Blocked Customers by Segment",
-    )
-    fig.update_traces(texttemplate="%{text:,}", textposition="outside", marker_color="#dc2626")
-    fig.update_layout(
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(family="Arial", size=13, color="#111827"),
-        margin=dict(l=160, r=40, t=60, b=40),
-        xaxis_title="Blocked customers",
-        yaxis_title="Segment",
-    )
-    return fig
-
-
-
-
-
-
-
-# ------------------------------------------------------------------
-# Stability compatibility helpers.
-# These keep older callback names working after dashboard refactors.
-# ------------------------------------------------------------------
 
 def empty_figure(title: str = "No data available", message: str = "No matching records for the selected filters."):
     try:
@@ -5155,8 +4810,108 @@ def build_guardrail_blocked_segment_fig(df: pd.DataFrame):
 
 
 
+
+
+def parse_test_split_value(value) -> float:
+    """Convert A/B split dropdown values like '50/50' or numeric 50 into treatment percentage."""
+    if value is None:
+        return 50.0
+
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    text_value = str(value).strip()
+
+    if "/" in text_value:
+        first_part = text_value.split("/", 1)[0].strip()
+        try:
+            return float(first_part)
+        except ValueError:
+            return 50.0
+
+    digits = "".join(ch for ch in text_value if ch.isdigit() or ch == ".")
+    if digits:
+        try:
+            return float(digits)
+        except ValueError:
+            return 50.0
+
+    return 50.0
+
+
+
+def get_active_customer_features(active_records):
+    """Return uploaded active dataset when available; otherwise return synthetic demo data."""
+    if active_records:
+        try:
+            active_df = pd.DataFrame(active_records)
+            if not active_df.empty and "customer_id" in active_df.columns:
+                return active_df.copy()
+        except Exception:
+            pass
+    return customer_features.copy()
+
+
+def score_uploaded_customer_file(uploaded_df: pd.DataFrame) -> pd.DataFrame:
+    """Validate, score, and enrich an uploaded customer file for dashboard use."""
+    missing_required = [col for col in REQUIRED_UPLOAD_COLUMNS if col not in uploaded_df.columns]
+    if missing_required:
+        raise ValueError("Missing required fields: " + ", ".join(missing_required))
+
+    base_input = uploaded_df[REQUIRED_UPLOAD_COLUMNS].copy()
+    scored_df = score_customer_portfolio(base_input)
+
+    # Preserve optional and extra uploaded fields without overwriting scored engine fields.
+    preserve_cols = [col for col in uploaded_df.columns if col not in scored_df.columns or col == "customer_id"]
+    if preserve_cols:
+        scored_df = scored_df.merge(
+            uploaded_df[preserve_cols],
+            on="customer_id",
+            how="left",
+        )
+
+    # Fill profile/enrichment fields that the dashboard expects.
+    fallback_values = {
+        "customer_name": "Uploaded Customer",
+        "customer_email": "not_provided@example.com",
+        "phone_number": "Not provided",
+        "city": "Not provided",
+        "state": "NA",
+        "zip_code": "NA",
+        "employment_status": "Not provided",
+        "occupation_group": "Not provided",
+        "preferred_channel": "Not provided",
+        "relationship_tier": "Standard",
+        "signup_channel": "Not provided",
+        "account_open_date": "Not provided",
+        "digital_engagement_score": 0,
+        "last_app_login_days": 0,
+        "autopay_enrolled": "Unknown",
+        "paperless_enrolled": "Unknown",
+        "card_type": "Unknown",
+        "rewards_preference": "Unknown",
+    }
+
+    for col, value in fallback_values.items():
+        if col not in scored_df.columns:
+            scored_df[col] = value
+        else:
+            scored_df[col] = scored_df[col].fillna(value)
+
+    # Friendly defaults for fields used in tables/charts.
+    if "recommended_action" not in scored_df.columns and "decision_status" in scored_df.columns:
+        scored_df["recommended_action"] = scored_df["decision_status"]
+
+    if "offer_type" not in scored_df.columns:
+        scored_df["offer_type"] = scored_df.get("recommended_action", "Not assigned")
+
+    return scored_df
+
+
 @app.callback(
     Output("customer-data-upload-message", "children"),
+    Output("active-customer-data-store", "data"),
+    Output("active-data-mode-store", "data"),
     Input("customer-data-upload", "contents"),
     State("customer-data-upload", "filename"),
     prevent_initial_call=True,
@@ -5190,7 +4945,7 @@ def validate_customer_data_upload(contents, filename):
                     "padding": "12px",
                     "color": "#7f1d1d",
                 },
-            )
+            ), no_update, no_update
 
         uploaded_columns = list(uploaded_df.columns)
         missing_required = [col for col in REQUIRED_UPLOAD_COLUMNS if col not in uploaded_columns]
@@ -5199,6 +4954,19 @@ def validate_customer_data_upload(contents, filename):
 
         ready = len(missing_required) == 0
         preview_df = uploaded_df.head(5).copy()
+
+        scored_active_df = None
+        active_records = no_update
+        active_mode = no_update
+
+        if ready:
+            scored_active_df = score_uploaded_customer_file(uploaded_df)
+            active_records = scored_active_df.to_dict("records")
+            active_mode = {
+                "mode": "uploaded",
+                "rows": int(len(scored_active_df)),
+                "filename": filename or "uploaded_file",
+            }
 
         return html.Div(
             children=[
@@ -5211,7 +4979,7 @@ def validate_customer_data_upload(contents, filename):
                             style={"marginTop": "6px"},
                         ),
                         html.Div(
-                            "Ready for scoring connection." if ready else "Missing required fields: " + ", ".join(missing_required),
+                            "Uploaded file is now active in the dashboard." if ready else "Missing required fields: " + ", ".join(missing_required),
                             style={"marginTop": "6px", "fontWeight": "800"},
                         ),
                     ],
@@ -5257,7 +5025,7 @@ def validate_customer_data_upload(contents, filename):
                     },
                 ),
             ]
-        )
+        ), active_records, active_mode
 
     except Exception as error:
         return html.Div(
@@ -5273,7 +5041,7 @@ def validate_customer_data_upload(contents, filename):
                 "padding": "12px",
                 "color": "#7f1d1d",
             },
-        )
+        ), no_update, no_update
 
 
 
@@ -5315,6 +5083,7 @@ def download_schema_excel(n_clicks):
 
 
 
+
 @app.callback(
     Output("overview-decision-share", "figure"),
     Output("overview-decision-counts", "figure"),
@@ -5330,13 +5099,17 @@ def download_schema_excel(n_clicks):
     Input("filter-decision", "value"),
     Input("filter-risk", "value"),
     Input("filter-action", "value"),
+    Input("active-customer-data-store", "data"),
 )
-def update_filtered_charts(selected_segments, selected_decisions, selected_risks, selected_actions):
+def update_filtered_charts(selected_segments, selected_decisions, selected_risks, selected_actions, active_data):
+    master_df = get_active_customer_features(active_data)
+
     filtered = apply_global_filters(
         selected_segments,
         selected_decisions,
         selected_risks,
         selected_actions,
+        master_df,
     )
 
     view_label = get_active_view_label(
@@ -5346,22 +5119,255 @@ def update_filtered_charts(selected_segments, selected_decisions, selected_risks
         selected_actions,
     )
 
+    def master_empty_figure(title, message="No records available for this view."):
+        fig = go.Figure()
+        fig.add_annotation(
+            text=message,
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            font={"size": 14, "color": COLORS["muted"]},
+        )
+        fig.update_layout(
+            title=title,
+            height=360,
+            margin={"l": 40, "r": 30, "t": 70, "b": 40},
+            paper_bgcolor="white",
+            plot_bgcolor="white",
+        )
+        return fig
+
+    def polish(fig, title):
+        fig.update_layout(
+            title=title,
+            height=390,
+            margin={"l": 50, "r": 30, "t": 70, "b": 50},
+            paper_bgcolor="white",
+            plot_bgcolor="white",
+            font={"family": "Arial", "size": 12, "color": COLORS["text"]},
+        )
+        return fig
+
+    def value_counts_frame(df, column, label_name, value_name):
+        if df.empty or column not in df.columns:
+            return pd.DataFrame(columns=[label_name, value_name])
+
+        counts = (
+            df[column]
+            .fillna("Unknown")
+            .astype(str)
+            .value_counts()
+            .reset_index()
+        )
+        counts.columns = [label_name, value_name]
+        return counts
+
+    def decision_share_figure(df):
+        counts = value_counts_frame(df, "decision_status", "decision_status", "customers")
+        if counts.empty:
+            return master_empty_figure("Decision Status Share")
+
+        fig = px.pie(
+            counts,
+            names="decision_status",
+            values="customers",
+            hole=0.55,
+            title="Decision Status Share",
+            color="decision_status",
+            color_discrete_map=DECISION_COLOR_MAP,
+        )
+        fig.update_traces(textposition="inside", textinfo="percent+label")
+        return polish(fig, "Decision Status Share")
+
+    def decision_count_figure(df):
+        counts = value_counts_frame(df, "decision_status", "decision_status", "customers")
+        if counts.empty:
+            return master_empty_figure("Decision Status Count")
+
+        fig = px.bar(
+            counts,
+            x="decision_status",
+            y="customers",
+            title="Decision Status Count",
+            color="decision_status",
+            color_discrete_map=DECISION_COLOR_MAP,
+            text="customers",
+        )
+        fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+        fig.update_layout(showlegend=False, yaxis_title="Customer Count", xaxis_title="")
+        return polish(fig, "Decision Status Count")
+
+    def segment_size_figure(df):
+        counts = value_counts_frame(df, "customer_segment", "customer_segment", "customers")
+        if counts.empty:
+            return master_empty_figure("Customer Count by Segment")
+
+        fig = px.bar(
+            counts.sort_values("customers", ascending=True),
+            x="customers",
+            y="customer_segment",
+            orientation="h",
+            title="Customer Count by Segment",
+            text="customers",
+        )
+        fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+        fig.update_layout(showlegend=False, xaxis_title="Customer Count", yaxis_title="")
+        return polish(fig, "Customer Count by Segment")
+
+    def segment_eligibility_figure(df):
+        if df.empty or "customer_segment" not in df.columns or "decision_status" not in df.columns:
+            return master_empty_figure("Scale/Test Eligibility by Segment")
+
+        segment_frame = df.copy()
+        segment_frame["eligible_flag"] = segment_frame["decision_status"].isin(["Scale", "Test"]).astype(int)
+
+        summary = (
+            segment_frame
+            .groupby("customer_segment", as_index=False)
+            .agg(customers=("customer_id", "count"), eligible=("eligible_flag", "sum"))
+        )
+        summary["eligible_rate"] = summary["eligible"] / summary["customers"] * 100
+
+        fig = px.bar(
+            summary.sort_values("eligible_rate", ascending=True),
+            x="eligible_rate",
+            y="customer_segment",
+            orientation="h",
+            title="Scale/Test Eligibility by Segment",
+            text=summary["eligible_rate"].round(1),
+        )
+        fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+        fig.update_layout(showlegend=False, xaxis_title="Eligible Rate", yaxis_title="")
+        return polish(fig, "Scale/Test Eligibility by Segment")
+
+    def segment_decision_mix_figure(df):
+        if df.empty or "customer_segment" not in df.columns or "decision_status" not in df.columns:
+            return master_empty_figure("Decision Mix by Segment")
+
+        mix = (
+            df.groupby(["customer_segment", "decision_status"], as_index=False)
+            .size()
+            .rename(columns={"size": "customers"})
+        )
+
+        fig = px.bar(
+            mix,
+            x="customer_segment",
+            y="customers",
+            color="decision_status",
+            title="Decision Mix by Segment",
+            color_discrete_map=DECISION_COLOR_MAP,
+        )
+        fig.update_layout(barmode="stack", xaxis_title="", yaxis_title="Customer Count")
+        return polish(fig, "Decision Mix by Segment")
+
+    def action_mix_figure(df):
+        counts = value_counts_frame(df, "recommended_action", "recommended_action", "customers")
+        if counts.empty:
+            return master_empty_figure("Recommended Action Mix")
+
+        fig = px.bar(
+            counts.sort_values("customers", ascending=True),
+            x="customers",
+            y="recommended_action",
+            orientation="h",
+            title="Recommended Action Mix",
+            text="customers",
+        )
+        fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+        fig.update_layout(showlegend=False, xaxis_title="Customer Count", yaxis_title="")
+        return polish(fig, "Recommended Action Mix")
+
+    def offer_type_figure(df):
+        counts = value_counts_frame(df, "offer_type", "offer_type", "customers")
+        if counts.empty:
+            return master_empty_figure("Offer Type Distribution")
+
+        fig = px.bar(
+            counts.sort_values("customers", ascending=True),
+            x="customers",
+            y="offer_type",
+            orientation="h",
+            title="Offer Type Distribution",
+            text="customers",
+        )
+        fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+        fig.update_layout(showlegend=False, xaxis_title="Customer Count", yaxis_title="")
+        return polish(fig, "Offer Type Distribution")
+
+    def risk_band_figure(df):
+        counts = value_counts_frame(df, "risk_band", "risk_band", "customers")
+        if counts.empty:
+            return master_empty_figure("Risk Band Distribution")
+
+        fig = px.bar(
+            counts,
+            x="risk_band",
+            y="customers",
+            title="Risk Band Distribution",
+            color="risk_band",
+            color_discrete_map=RISK_COLOR_MAP,
+            text="customers",
+        )
+        fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+        fig.update_layout(showlegend=False, xaxis_title="", yaxis_title="Customer Count")
+        return polish(fig, "Risk Band Distribution")
+
+    def high_utilization_figure(df):
+        if df.empty or "customer_segment" not in df.columns:
+            return master_empty_figure("High-Utilization Revolver Decisions")
+
+        high_util_df = df[df["customer_segment"] == "High-Utilization Revolver"].copy()
+
+        if high_util_df.empty:
+            return master_empty_figure(
+                "High-Utilization Revolver Decisions",
+                "No High-Utilization Revolver customers in this active view.",
+            )
+
+        return decision_count_figure(high_util_df).update_layout(title="High-Utilization Revolver Decisions")
+
+    def blocked_segment_figure(df):
+        if df.empty or "decision_status" not in df.columns:
+            return master_empty_figure("Blocked Customers by Segment")
+
+        blocked_df = df[df["decision_status"] == "Block"].copy()
+
+        if blocked_df.empty:
+            return master_empty_figure(
+                "Blocked Customers by Segment",
+                "No blocked customers in this active view.",
+            )
+
+        counts = value_counts_frame(blocked_df, "customer_segment", "customer_segment", "customers")
+        fig = px.bar(
+            counts.sort_values("customers", ascending=True),
+            x="customers",
+            y="customer_segment",
+            orientation="h",
+            title="Blocked Customers by Segment",
+            text="customers",
+        )
+        fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+        fig.update_layout(showlegend=False, xaxis_title="Blocked Customer Count", yaxis_title="")
+        return polish(fig, "Blocked Customers by Segment")
+
     figures = (
-        build_decision_share_fig(filtered),
-        build_decision_count_fig(filtered),
-        build_segment_size_fig(filtered),
-        build_segment_eligibility_fig(filtered),
-        build_segment_decision_mix_fig(filtered),
-        build_action_mix_fig(filtered),
-        build_offer_type_fig(filtered),
-        build_risk_band_fig(filtered),
-        build_high_utilization_fig(filtered),
-        build_blocked_segment_fig(filtered),
+        decision_share_figure(filtered),
+        decision_count_figure(filtered),
+        segment_size_figure(filtered),
+        segment_eligibility_figure(filtered),
+        segment_decision_mix_figure(filtered),
+        action_mix_figure(filtered),
+        offer_type_figure(filtered),
+        risk_band_figure(filtered),
+        high_utilization_figure(filtered),
+        blocked_segment_figure(filtered),
     )
 
     return tuple(apply_view_label_to_figure(fig, view_label) for fig in figures)
-
-
 
 
 
@@ -5371,27 +5377,33 @@ def update_filtered_charts(selected_segments, selected_decisions, selected_risks
     Input("customer-directory-search", "value"),
     Input("customer-directory-segment-filter", "value"),
     Input("customer-directory-decision-filter", "value"),
+    Input("active-customer-data-store", "data"),
 )
-def update_customer_directory(search_value, selected_segment, selected_decision):
-    directory = customer_features[
-        [
-            "customer_id",
-            "customer_name",
-            "customer_email",
-            "city",
-            "state",
-            "customer_segment",
-            "risk_band",
-            "decision_status",
-        ]
-    ].copy()
+def update_customer_directory(search_value, selected_segment, selected_decision, active_data):
+    active_features = get_active_customer_features(active_data).copy()
 
-    directory["location"] = directory["city"] + ", " + directory["state"]
+    directory_columns = [
+        "customer_id",
+        "customer_name",
+        "customer_email",
+        "city",
+        "state",
+        "customer_segment",
+        "risk_band",
+        "decision_status",
+    ]
 
-    if selected_segment:
+    for column in directory_columns:
+        if column not in active_features.columns:
+            active_features[column] = "Unknown"
+
+    directory = active_features[directory_columns].copy()
+    directory["location"] = directory["city"].astype(str) + ", " + directory["state"].astype(str)
+
+    if selected_segment and "customer_segment" in directory.columns:
         directory = directory[directory["customer_segment"] == selected_segment]
 
-    if selected_decision:
+    if selected_decision and "decision_status" in directory.columns:
         directory = directory[directory["decision_status"] == selected_decision]
 
     if search_value:
@@ -5415,27 +5427,23 @@ def update_customer_directory(search_value, selected_segment, selected_decision)
 
         directory = directory[searchable.str.contains(search_text, na=False)]
 
-    directory = directory[
-        [
-            "customer_id",
-            "customer_name",
-            "location",
-            "customer_segment",
-            "risk_band",
-            "decision_status",
-        ]
-    ].head(500)
+    directory = directory.sort_values("customer_id").head(500)
 
-    return directory.to_dict("records"), [0] if len(directory) > 0 else []
+    if directory.empty:
+        return [], []
+
+    return directory.to_dict("records"), [0]
 
 
 
 @app.callback(
     Output("customer-lookup-output", "children"),
     Input("customer-directory-table", "selected_rows"),
-    State("customer-directory-table", "derived_virtual_data"),
+    Input("customer-directory-table", "derived_virtual_data"),
+    Input("active-customer-data-store", "data"),
 )
-def update_customer_lookup(selected_rows, table_data):
+def update_customer_lookup(selected_rows, table_data, active_data):
+    active_features = get_active_customer_features(active_data)
     if not table_data:
         return html.Div(
             "No customers are available in the current directory view.",
@@ -5457,7 +5465,7 @@ def update_customer_lookup(selected_rows, table_data):
 
     customer_id = table_data[selected_index]["customer_id"]
 
-    selected = customer_features[customer_features["customer_id"] == customer_id]
+    selected = active_features[active_features["customer_id"].astype(str) == str(customer_id)]
 
     if selected.empty:
         return html.Div(
@@ -5713,305 +5721,93 @@ def sync_scenario_inputs_with_campaign(campaign_id: str):
     Input("scenario-marketing-cost", "value"),
     Input("scenario-spend-lift", "value"),
     Input("scenario-risk-threshold", "value"),
+    Input("active-customer-data-store", "data"),
 )
-def update_scenario_simulator(campaign_id: str, segment: str, marketing_cost: float, spend_lift_percent: float, risk_threshold_percent: float):
-    scenario_df = customer_features.copy()
+def update_scenario_simulator(
+    campaign_id,
+    segment,
+    marketing_cost,
+    spend_lift_percent,
+    risk_threshold_percent,
+    active_data,
+):
+    master_df = get_active_customer_features(active_data)
 
-    selected_campaign = None
+    scenario_df = get_campaign_audience_df(
+        campaign_id,
+        segment or "All Segments",
+        "Eligible",
+        source_df=master_df,
+    )
 
-    if not campaign_recommendations.empty and campaign_id not in [None, "None"]:
-        campaign_match = campaign_recommendations[
-            campaign_recommendations["campaign_id"] == campaign_id
-        ]
-
-        if not campaign_match.empty:
-            selected_campaign = campaign_match.iloc[0]
-
-            target_segments = split_semicolon_values(selected_campaign.get("target_segments", ""))
-            excluded_segments = split_semicolon_values(selected_campaign.get("excluded_segments", ""))
-
-            if segment == "All Segments" and target_segments:
-                scenario_df = scenario_df[
-                    scenario_df["customer_segment"].isin(target_segments)
-                ].copy()
-
-            if excluded_segments:
-                scenario_df = scenario_df[
-                    ~scenario_df["customer_segment"].isin(excluded_segments)
-                ].copy()
-
-    if segment != "All Segments":
-        scenario_df = scenario_df[scenario_df["customer_segment"] == segment].copy()
-
-    spend_lift = spend_lift_percent / 100
-    risk_threshold = risk_threshold_percent / 100
-
-    interchange_rate = 0.020
-    monthly_interest_rate = 0.245 / 12
-    rewards_rate = 0.009
-    loss_given_default = 0.72
-
-    campaign_horizon_months = 12
-    campaign_type = "Generic"
-
-    if selected_campaign is not None:
-        campaign_horizon_months = int(selected_campaign.get("campaign_horizon_months", 12))
-        campaign_type = str(selected_campaign.get("campaign_type", "Generic"))
-
-    # Use expected campaign cost instead of charging full cost to every customer.
-    expected_campaign_cost = marketing_cost * 0.55
-
-    if campaign_type == "Merchant-Funded Offer":
-        expected_campaign_cost = marketing_cost * 0.35
-        rewards_rate = 0.004
-    elif campaign_type in ["Digital Engagement", "Servicing Engagement", "Protective Engagement"]:
-        expected_campaign_cost = marketing_cost * 0.40
-        rewards_rate = 0.003
-
-    base_incremental_spend = scenario_df["monthly_spend"] * spend_lift * campaign_horizon_months
-
-    incremental_revenue = base_incremental_spend * interchange_rate
-    incremental_interest = 0
-    incremental_risk_savings = 0
-
-    if campaign_type == "Balance Transfer / Revolver":
-        incremental_interest = (
-            scenario_df["revolving_balance"]
-            * spend_lift
-            * monthly_interest_rate
-            * campaign_horizon_months
+    if scenario_df.empty:
+        return create_zero_state_card(
+            "No scenario audience available",
+            "The selected campaign and segment do not return any customers in the active master dataset.",
+            "Try All Segments, a different campaign, or upload a larger customer file.",
         )
-        risk_cost_multiplier = 1.15
-    elif campaign_type == "Credit Line Review":
-        incremental_interest = (
-            scenario_df["revolving_balance"]
-            * spend_lift
-            * monthly_interest_rate
-            * campaign_horizon_months
-            * 0.50
-        )
-        risk_cost_multiplier = 0.95
-    elif campaign_type == "Protective Engagement":
-        expected_loss_base = (
-            scenario_df["default_probability"]
-            * scenario_df["current_balance"].clip(lower=0)
-            * loss_given_default
-        )
-        incremental_risk_savings = expected_loss_base * 0.006 * campaign_horizon_months
-        risk_cost_multiplier = 0.25
-    elif campaign_type == "Servicing Engagement":
-        expected_loss_base = (
-            scenario_df["default_probability"]
-            * scenario_df["current_balance"].clip(lower=0)
-            * loss_given_default
-        )
-        incremental_risk_savings = expected_loss_base * 0.004 * campaign_horizon_months
-        risk_cost_multiplier = 0.35
-    elif campaign_type in ["Retention", "Travel Rewards", "Lifestyle Rewards"]:
-        incremental_revenue = base_incremental_spend * (interchange_rate + 0.004)
-        risk_cost_multiplier = 0.50
+
+    marketing_cost = float(marketing_cost or 0)
+    spend_lift_percent = float(spend_lift_percent or 0)
+    risk_threshold_percent = float(risk_threshold_percent or 0)
+
+    monthly_spend = pd.to_numeric(scenario_df.get("monthly_spend", 0), errors="coerce").fillna(0)
+    risk_adjusted_profit = pd.to_numeric(scenario_df.get("risk_adjusted_profit", 0), errors="coerce").fillna(0)
+    default_probability = pd.to_numeric(scenario_df.get("default_probability", 0), errors="coerce").fillna(0)
+
+    total_customers = int(len(scenario_df))
+    avg_default_probability = float(default_probability.mean()) if total_customers else 0
+    total_monthly_spend = float(monthly_spend.sum())
+    baseline_profit = float(risk_adjusted_profit.sum())
+
+    incremental_spend = total_monthly_spend * (spend_lift_percent / 100)
+    assumed_margin_rate = 0.018
+    incremental_margin = incremental_spend * assumed_margin_rate
+    total_campaign_cost = total_customers * marketing_cost
+    net_incremental_value = incremental_margin - total_campaign_cost
+    projected_profit = baseline_profit + net_incremental_value
+
+    risk_pass = avg_default_probability <= (risk_threshold_percent / 100 if risk_threshold_percent > 1 else risk_threshold_percent)
+    economics_pass = net_incremental_value > 0
+
+    if risk_pass and economics_pass:
+        recommendation = "Scale"
+        recommendation_detail = "Economics are positive and the average default probability is within the selected risk threshold."
+        accent = "#16a34a"
+    elif risk_pass and not economics_pass:
+        recommendation = "Test"
+        recommendation_detail = "Risk is acceptable, but economics are not strong enough for full rollout without an experiment."
+        accent = "#2563eb"
     else:
-        risk_cost_multiplier = 0.45
-
-    incremental_rewards_cost = base_incremental_spend * rewards_rate
-    incremental_expected_loss = (
-        scenario_df["default_probability"]
-        * base_incremental_spend
-        * loss_given_default
-        * risk_cost_multiplier
-    )
-
-    scenario_df["scenario_incremental_profit"] = (
-        incremental_revenue
-        + incremental_interest
-        + incremental_risk_savings
-        - incremental_rewards_cost
-        - incremental_expected_loss
-        - expected_campaign_cost
-    )
-
-    scenario_df["scenario_roi"] = scenario_df["scenario_incremental_profit"] / expected_campaign_cost
-
-    scenario_df["scenario_decision"] = "Do Not Launch"
-
-    block_mask = (
-        (scenario_df["customer_segment"] == "Risk Watch")
-        | (scenario_df["risk_band"] == "Very High Risk")
-        | (scenario_df["default_probability"] > risk_threshold)
-    )
-
-    if selected_campaign is not None:
-        risk_sensitivity = selected_campaign.get("risk_sensitivity", "Medium")
-
-        if risk_sensitivity in ["High", "Very High"]:
-            block_mask = (
-                block_mask
-                | (scenario_df["late_payments_12m"] > 0)
-                | (scenario_df["risk_adjusted_profit"] < 0)
-            )
-
-        if risk_sensitivity == "Very High":
-            block_mask = (
-                block_mask
-                | (scenario_df["utilization_rate"] > 0.45)
-                | (scenario_df["credit_score"] < 700)
-            )
-
-        if risk_sensitivity == "Protective":
-            block_mask = (
-                (scenario_df["customer_segment"] == "Risk Watch")
-                | (scenario_df["risk_band"] == "Very High Risk")
-                | (scenario_df["default_probability"] > risk_threshold)
-            )
-
-    scale_mask = (
-        (scenario_df["scenario_roi"] >= 5)
-        & (~block_mask)
-        & (scenario_df["customer_segment"] != "High-Utilization Revolver")
-    )
-
-    test_mask = (
-        (scenario_df["scenario_roi"] >= 0)
-        & (~block_mask)
-        & (~scale_mask)
-    )
-
-    scenario_df.loc[block_mask, "scenario_decision"] = "Block"
-    scenario_df.loc[test_mask, "scenario_decision"] = "Test"
-    scenario_df.loc[scale_mask, "scenario_decision"] = "Scale"
-
-    total_customers = len(scenario_df)
-    scale_count = int((scenario_df["scenario_decision"] == "Scale").sum())
-    test_count = int((scenario_df["scenario_decision"] == "Test").sum())
-    block_count = int((scenario_df["scenario_decision"] == "Block").sum())
-    eligible_count = scale_count + test_count
-    total_profit = scenario_df["scenario_incremental_profit"].sum()
-    avg_roi = scenario_df["scenario_roi"].mean()
-
-    if total_customers == 0:
-        return html.Div("No customers found for this scenario.")
-
-    if block_count / total_customers > 0.25:
-        recommendation = "Conservative scenario. A large share of customers would be blocked, so this setup is better for risk protection than growth."
-        rec_color = "#dc2626"
-    elif scale_count / total_customers > 0.35 and total_profit > 0:
-        recommendation = "Strong growth scenario. The assumptions create a meaningful scale pool while keeping guardrails active."
-        rec_color = "#16a34a"
-    elif eligible_count / total_customers > 0.35:
-        recommendation = "Test-first scenario. There is opportunity, but enough uncertainty remains that controlled testing is better than broad rollout."
-        rec_color = "#2563eb"
-    else:
-        recommendation = "Limited launch scenario. Expected lift or economics may be too weak, so the business should revisit offer design before launch."
-        rec_color = "#f97316"
-
-    decision_mix = scenario_df["scenario_decision"].value_counts().reset_index()
-    decision_mix.columns = ["scenario_decision", "customer_count"]
-
-    scenario_fig = px.bar(
-        decision_mix,
-        x="scenario_decision",
-        y="customer_count",
-        text="customer_count",
-        color="scenario_decision",
-        color_discrete_map=DECISION_COLOR_MAP,
-        title="Scenario Decision Mix",
-    )
-    scenario_fig.update_traces(texttemplate="%{text:,}", textposition="outside")
-    scenario_fig.update_layout(
-        showlegend=False,
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        margin=dict(l=40, r=30, t=55, b=40),
-        font=dict(family="Arial", size=13, color="#1f2937"),
-        xaxis_title="Scenario Decision",
-        yaxis_title="Customer Count",
-    )
-
-    if selected_campaign is None:
-        campaign_assumption_card = html.Div(
-            "No campaign selected. Scenario uses manual assumptions.",
-            style={
-                "backgroundColor": "#f8fafc",
-                "border": f"1px solid {COLORS['border']}",
-                "borderRadius": "14px",
-                "padding": "14px",
-                "marginBottom": "16px",
-                "color": COLORS["muted"],
-                "fontWeight": "700",
-            },
-        )
-    else:
-        campaign_assumption_card = html.Div(
-            children=[
-                html.Div(
-                    "Selected Campaign",
-                    style={
-                        "fontSize": "12px",
-                        "fontWeight": "900",
-                        "textTransform": "uppercase",
-                        "color": COLORS["muted"],
-                        "marginBottom": "6px",
-                    },
-                ),
-                html.Div(
-                    selected_campaign["campaign_name"],
-                    style={
-                        "fontSize": "18px",
-                        "fontWeight": "900",
-                        "color": COLORS["text"],
-                        "marginBottom": "6px",
-                    },
-                ),
-                html.Div(
-                    f"{selected_campaign['campaign_family']} • {selected_campaign['recommended_rollout_decision']} • {selected_campaign['risk_level']} risk • {campaign_horizon_months} month horizon",
-                    style={
-                        "fontSize": "13px",
-                        "fontWeight": "700",
-                        "color": COLORS["muted"],
-                    },
-                ),
-            ],
-            style={
-                "backgroundColor": COLORS["light_blue"],
-                "border": f"1px solid {COLORS['border']}",
-                "borderRadius": "14px",
-                "padding": "14px",
-                "marginBottom": "16px",
-            },
-        )
+        recommendation = "Do Not Launch"
+        recommendation_detail = "Risk threshold is breached for this active audience."
+        accent = "#dc2626"
 
     return html.Div(
         children=[
-            campaign_assumption_card,
             html.Div(
                 children=[
-                    create_small_metric_card("Customers in Scenario", f"{total_customers:,}", "Filtered portfolio size", "#2563eb"),
-                    create_small_metric_card("Scale Customers", f"{scale_count:,}", "Customers eligible for broad rollout", "#16a34a"),
-                    create_small_metric_card("Test Customers", f"{test_count:,}", "Customers recommended for controlled testing", "#2563eb"),
-                    create_small_metric_card("Blocked Customers", f"{block_count:,}", "Customers blocked by risk guardrails", "#dc2626"),
-                ],
-                style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px", "marginBottom": "18px"},
-            ),
-            html.Div(
-                children=[
-                    create_small_metric_card("Estimated Incremental Profit", f"${total_profit:,.0f}", "Scenario-level campaign profit", "#7c3aed"),
-                    create_small_metric_card("Average Scenario ROI", f"{avg_roi:.1f}x", "Average return per marketing dollar", "#0ea5e9"),
-                ],
-                style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "12px", "marginBottom": "18px"},
-            ),
-            dcc.Graph(figure=scenario_fig),
-            html.Div(
-                children=[
-                    html.H4("Recommendation", style={"margin": "0 0 8px 0"}),
-                    html.P(recommendation, style={"margin": "0", "lineHeight": "1.55"}),
+                    html.Div("Scenario Recommendation", style={"fontSize": "13px", "fontWeight": "900", "color": COLORS["muted"], "textTransform": "uppercase"}),
+                    html.H2(recommendation, style={"margin": "6px 0 4px 0", "fontSize": "28px", "fontWeight": "900", "color": accent}),
+                    html.P(recommendation_detail, style={"margin": "0", "color": COLORS["muted"], "lineHeight": "1.45"}),
                 ],
                 style={
                     "backgroundColor": "#ffffff",
-                    "borderLeft": f"5px solid {rec_color}",
-                    "borderRadius": "14px",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "18px",
                     "padding": "18px",
-                    "boxShadow": "0 6px 18px rgba(15, 23, 42, 0.05)",
+                    "marginBottom": "14px",
                 },
+            ),
+            html.Div(
+                children=[
+                    create_kpi_card("Audience Size", f"{total_customers:,}", "Active master dataset customers", "#2563eb"),
+                    create_kpi_card("Avg Default Probability", f"{avg_default_probability:.2%}", "Compared with risk threshold", "#dc2626" if not risk_pass else "#16a34a"),
+                    create_kpi_card("Incremental Spend", f"${incremental_spend:,.0f}", f"{spend_lift_percent:.1f}% lift assumption", "#0ea5e9"),
+                    create_kpi_card("Net Incremental Value", f"${net_incremental_value:,.0f}", "Margin minus campaign cost", "#16a34a" if economics_pass else "#f97316"),
+                    create_kpi_card("Projected Profit", f"${projected_profit:,.0f}", "Baseline risk-adjusted profit plus scenario value", "#7c3aed"),
+                ],
+                style={"display": "grid", "gridTemplateColumns": "repeat(5, 1fr)", "gap": "14px"},
             ),
         ]
     )
@@ -6056,382 +5852,156 @@ def sync_ab_inputs_with_campaign(campaign_id: str):
     Input("ab-test-population", "value"),
     Input("ab-test-split", "value"),
     Input("ab-test-duration", "value"),
+    Input("active-customer-data-store", "data"),
 )
-def update_ab_test_planner(campaign_id: str, segment: str, baseline_rate_percent: float, lift_pp: float, test_population: int, split_value: str, test_duration_weeks: int):
-    selected_campaign = None
-
-    if not campaign_recommendations.empty and campaign_id not in [None, "None"]:
-        campaign_match = campaign_recommendations[
-            campaign_recommendations["campaign_id"] == campaign_id
-        ]
-
-        if not campaign_match.empty:
-            selected_campaign = campaign_match.iloc[0]
-
-    # Use the same source of truth as the export center.
-    # This keeps the displayed audience, experiment sizing, table preview, and downloads aligned.
-    segment_df = get_campaign_audience_df(campaign_id, segment, "Eligible")
-    segment_size = len(segment_df)
-
-    available_population = min(segment_size, test_population)
-
-    if not split_value or "/" not in split_value:
-        split_value = "50/50"
-
+def update_ab_test_planner(
+    campaign_id,
+    segment,
+    baseline_rate_percent,
+    lift_pp,
+    test_population,
+    test_split,
+    test_duration,
+    active_data,
+):
     try:
-        control_share = int(split_value.split("/")[0]) / 100
-    except ValueError:
-        control_share = 0.50
+        master_df = get_active_customer_features(active_data)
 
-    control_share = max(0.20, min(0.90, control_share))
-    control_size = int(available_population * control_share)
-    treatment_size = available_population - control_size
+        safe_segment = segment or "All Segments"
 
-    baseline_rate = baseline_rate_percent / 100
-    treatment_rate = baseline_rate + (lift_pp / 100)
+        # If uploaded data is active and the selected segment no longer exists, fall back to All Segments.
+        if (
+            safe_segment != "All Segments"
+            and "customer_segment" in master_df.columns
+            and safe_segment not in set(master_df["customer_segment"].dropna().astype(str).unique())
+        ):
+            safe_segment = "All Segments"
 
-    expected_control_responders = control_size * baseline_rate
-    expected_treatment_responders = treatment_size * treatment_rate
-    incremental_responders = expected_treatment_responders - (treatment_size * baseline_rate)
+        audience_df = get_campaign_audience_df(
+            campaign_id,
+            safe_segment,
+            "Eligible",
+            source_df=master_df,
+        )
 
-    # Approximate sample size per group for detecting difference in two proportions
-    z_alpha = 1.96
-    z_beta = 0.84
-    p1 = baseline_rate
-    p2 = treatment_rate
-    effect = max(abs(p2 - p1), 0.001)
-    pooled_p = (p1 + p2) / 2
-    required_per_group = int(
-        ((z_alpha + z_beta) ** 2)
-        * (pooled_p * (1 - pooled_p) * 2)
-        / (effect ** 2)
-    )
+        if audience_df.empty:
+            available_segments = []
+            if "customer_segment" in master_df.columns:
+                available_segments = sorted(master_df["customer_segment"].dropna().astype(str).unique())
 
-    total_required = required_per_group * 2
+            return html.Div(
+                children=[
+                    create_zero_state_card(
+                        "No A/B audience available",
+                        "The selected campaign and segment do not return any eligible customers in the active master dataset.",
+                        "Use All Segments, select a segment that exists in the uploaded file, choose a different campaign, or upload a larger customer file.",
+                    ),
+                    html.Div(
+                        children=[
+                            html.Strong("Active uploaded segments: "),
+                            ", ".join(available_segments) if available_segments else "No segment values found",
+                        ],
+                        style={
+                            "marginTop": "12px",
+                            "backgroundColor": "#eff6ff",
+                            "border": "1px solid #bfdbfe",
+                            "borderRadius": "12px",
+                            "padding": "12px",
+                            "color": "#1e3a8a",
+                        },
+                    ),
+                ]
+            )
 
-    if available_population >= total_required:
-        readiness = "Ready to test"
-        rec_color = "#16a34a"
-        recommendation = "The available population is large enough for this test assumption. Proceed with a controlled A/B test before scaling this campaign."
-    elif available_population >= total_required * 0.6:
-        readiness = "Directional test"
-        rec_color = "#f97316"
-        recommendation = "The test may provide directional learning, but it may not be strong enough for a high-confidence decision. Consider extending the test window or combining similar segments."
-    else:
-        readiness = "Underpowered"
-        rec_color = "#dc2626"
-        recommendation = "The available population is likely too small for this expected lift. Increase the test population, target a larger campaign audience, extend test duration, or test a stronger offer."
+        baseline_rate_percent = float(baseline_rate_percent or 0)
+        lift_pp = float(lift_pp or 0)
+        test_population = int(test_population or 0)
+        test_split = parse_test_split_value(test_split)
+        test_duration = int(test_duration or 14)
 
-    ab_mix_df = pd.DataFrame(
-        {
-            "Group": ["Control", "Treatment"],
-            "Customers": [control_size, treatment_size],
-            "Expected Responders": [expected_control_responders, expected_treatment_responders],
-        }
-    )
+        available_customers = int(len(audience_df))
+        planned_population = min(test_population, available_customers) if test_population > 0 else available_customers
 
-    ab_fig = px.bar(
-        ab_mix_df,
-        x="Group",
-        y="Expected Responders",
-        text="Expected Responders",
-        title="Control vs Treatment Response Plan",
-    )
-    ab_fig.update_traces(texttemplate="%{text:.0f}", textposition="outside", marker_color=["#9ca3af", "#2563eb"])
-    ab_fig.update_layout(
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        margin=dict(l=40, r=30, t=55, b=40),
-        font=dict(family="Arial", size=13, color="#1f2937"),
-        xaxis_title="Experiment Group",
-        yaxis_title="Expected Responders",
-    )
+        treatment_customers = int(round(planned_population * test_split / 100))
+        control_customers = planned_population - treatment_customers
 
-    if segment_size == 0:
-        zero_audience_note = html.Div(
+        expected_control_responses = control_customers * (baseline_rate_percent / 100)
+        expected_treatment_responses = treatment_customers * ((baseline_rate_percent + lift_pp) / 100)
+        incremental_responses = expected_treatment_responses - (treatment_customers * baseline_rate_percent / 100)
+
+        ready = planned_population >= 100 and treatment_customers > 0 and control_customers > 0
+        readiness = "Ready to Test" if ready else "Small Sample / Directional Only"
+        accent = "#16a34a" if ready else "#f97316"
+
+        return html.Div(
             children=[
-                html.H4("No matching customers for this setup", style={"margin": "0 0 8px 0", "color": "#991b1b"}),
-                html.P(
-                    "This campaign and selected segment do not overlap after campaign targeting and guardrails. Choose All Segments, select one of the campaign target segments, or change the campaign to generate a testable audience.",
-                    style={"margin": "0", "lineHeight": "1.55", "color": "#7f1d1d"},
+                html.Div(
+                    children=[
+                        html.Div(
+                            "A/B Test Readiness",
+                            style={
+                                "fontSize": "13px",
+                                "fontWeight": "900",
+                                "color": COLORS["muted"],
+                                "textTransform": "uppercase",
+                            },
+                        ),
+                        html.H2(
+                            readiness,
+                            style={
+                                "margin": "6px 0 4px 0",
+                                "fontSize": "28px",
+                                "fontWeight": "900",
+                                "color": accent,
+                            },
+                        ),
+                        html.P(
+                            f"The planner is using {safe_segment}. Uploaded files automatically become the active master dataset.",
+                            style={"margin": "0", "color": COLORS["muted"], "lineHeight": "1.45"},
+                        ),
+                    ],
+                    style={
+                        "backgroundColor": "#ffffff",
+                        "border": f"1px solid {COLORS['border']}",
+                        "borderRadius": "18px",
+                        "padding": "18px",
+                        "marginBottom": "14px",
+                    },
+                ),
+                html.Div(
+                    children=[
+                        create_kpi_card("Available Audience", f"{available_customers:,}", "From active master dataset", "#2563eb"),
+                        create_kpi_card("Planned Test Size", f"{planned_population:,}", f"{test_duration} week test window", "#0ea5e9"),
+                        create_kpi_card("Control / Treatment", f"{control_customers:,} / {treatment_customers:,}", f"{100 - test_split:.0f}% / {test_split:.0f}% split", "#7c3aed"),
+                        create_kpi_card("Expected Incremental Responses", f"{incremental_responses:,.1f}", f"+{lift_pp:.1f} pp lift assumption", "#16a34a"),
+                        create_kpi_card("Decision Gate", "Scale if lift wins", "Scale only if risk guardrails remain clean", "#111827"),
+                    ],
+                    style={"display": "grid", "gridTemplateColumns": "repeat(5, 1fr)", "gap": "14px"},
+                ),
+            ]
+        )
+
+    except Exception as exc:
+        return html.Div(
+            children=[
+                html.H4("A/B planner could not run", style={"marginTop": "0", "color": "#991b1b"}),
+                html.Div(
+                    f"{type(exc).__name__}: {exc}",
+                    style={"fontFamily": "monospace", "fontSize": "13px", "whiteSpace": "pre-wrap"},
+                ),
+                html.Div(
+                    "This is now handled inside the dashboard instead of breaking the server.",
+                    style={"marginTop": "8px", "color": COLORS["muted"]},
                 ),
             ],
             style={
                 "backgroundColor": "#fef2f2",
                 "border": "1px solid #fecaca",
-                "borderLeft": "5px solid #dc2626",
                 "borderRadius": "14px",
-                "padding": "14px",
-                "marginBottom": "16px",
+                "padding": "16px",
+                "color": "#7f1d1d",
             },
         )
-    else:
-        zero_audience_note = html.Div()
-
-    if selected_campaign is None:
-        campaign_context_card = html.Div(
-            "No campaign selected. Test plan uses manual assumptions.",
-            style={
-                "backgroundColor": "#f8fafc",
-                "border": f"1px solid {COLORS['border']}",
-                "borderRadius": "14px",
-                "padding": "14px",
-                "marginBottom": "16px",
-                "color": COLORS["muted"],
-                "fontWeight": "700",
-            },
-        )
-    else:
-        campaign_context_card = html.Div(
-            children=[
-                html.Div(
-                    "Selected Campaign",
-                    style={
-                        "fontSize": "12px",
-                        "fontWeight": "900",
-                        "textTransform": "uppercase",
-                        "color": COLORS["muted"],
-                        "marginBottom": "6px",
-                    },
-                ),
-                html.Div(
-                    selected_campaign["campaign_name"],
-                    style={
-                        "fontSize": "18px",
-                        "fontWeight": "900",
-                        "color": COLORS["text"],
-                        "marginBottom": "6px",
-                    },
-                ),
-                html.Div(
-                    f"{selected_campaign['campaign_family']} • {selected_campaign['recommended_rollout_decision']} • {split_value} split • {test_duration_weeks} week test • baseline {baseline_rate_percent:.0f}% • lift +{lift_pp:.0f}pp",
-                    style={
-                        "fontSize": "13px",
-                        "fontWeight": "700",
-                        "color": COLORS["muted"],
-                    },
-                ),
-            ],
-            style={
-                "backgroundColor": COLORS["light_blue"],
-                "border": f"1px solid {COLORS['border']}",
-                "borderRadius": "14px",
-                "padding": "14px",
-                "marginBottom": "16px",
-            },
-        )
-
-    return html.Div(
-        children=[
-            campaign_context_card,
-            zero_audience_note,
-            html.Div(
-                children=[
-                    html.Div(
-                        children=[
-                            html.Div("1", style={"fontWeight": "900", "color": "#2563eb", "fontSize": "18px"}),
-                            html.H4("Control Group", style={"margin": "4px 0", "fontSize": "15px"}),
-                            html.P("Receives standard experience. Used to measure the natural baseline response.", style={"margin": "0", "fontSize": "13px", "color": COLORS["muted"], "lineHeight": "1.45"}),
-                        ],
-                        style={"backgroundColor": "#f8fafc", "border": f"1px solid {COLORS['border']}", "borderRadius": "14px", "padding": "14px"},
-                    ),
-                    html.Div(
-                        children=[
-                            html.Div("2", style={"fontWeight": "900", "color": "#2563eb", "fontSize": "18px"}),
-                            html.H4("Treatment Group", style={"margin": "4px 0", "fontSize": "15px"}),
-                            html.P("Receives the selected campaign. Lift is measured against the control group.", style={"margin": "0", "fontSize": "13px", "color": COLORS["muted"], "lineHeight": "1.45"}),
-                        ],
-                        style={"backgroundColor": "#eff6ff", "border": "1px solid #bfdbfe", "borderRadius": "14px", "padding": "14px"},
-                    ),
-                    html.Div(
-                        children=[
-                            html.Div("3", style={"fontWeight": "900", "color": "#16a34a", "fontSize": "18px"}),
-                            html.H4("Success Metric", style={"margin": "4px 0", "fontSize": "15px"}),
-                            html.P(selected_campaign["primary_success_metric"] if selected_campaign is not None else "Incremental response and campaign lift", style={"margin": "0", "fontSize": "13px", "color": COLORS["muted"], "lineHeight": "1.45"}),
-                        ],
-                        style={"backgroundColor": "#f0fdf4", "border": "1px solid #bbf7d0", "borderRadius": "14px", "padding": "14px"},
-                    ),
-                    html.Div(
-                        children=[
-                            html.Div("4", style={"fontWeight": "900", "color": "#f97316", "fontSize": "18px"}),
-                            html.H4("Decision Gate", style={"margin": "4px 0", "fontSize": "15px"}),
-                            html.P("Scale only if lift is positive, sample is powered, and risk guardrails stay within limits.", style={"margin": "0", "fontSize": "13px", "color": COLORS["muted"], "lineHeight": "1.45"}),
-                        ],
-                        style={"backgroundColor": "#fff7ed", "border": "1px solid #fed7aa", "borderRadius": "14px", "padding": "14px"},
-                    ),
-                ],
-                style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px", "marginBottom": "18px"},
-            ),
-            html.Div(
-                children=[
-                    create_small_metric_card("Eligible Test Audience", f"{segment_size:,}", "Customers matching campaign and segment filters", "#2563eb"),
-                    create_small_metric_card("Assigned Sample", f"{available_population:,}", "Customers included in experiment", "#0ea5e9"),
-                    create_small_metric_card("Required Sample Size", f"{total_required:,}", "Approximate sample needed for confidence", "#7c3aed"),
-                    create_small_metric_card("Power Readiness", readiness, "Experiment confidence check", rec_color),
-                ],
-                style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px", "marginBottom": "18px"},
-            ),
-            html.Div(
-                children=[
-                    create_small_metric_card("Control Group", f"{control_size:,}", f"Expected responders: {expected_control_responders:.0f}", "#9ca3af"),
-                    create_small_metric_card("Treatment Group", f"{treatment_size:,}", f"Expected responders: {expected_treatment_responders:.0f}", "#2563eb"),
-                    create_small_metric_card("Incremental Responders", f"{incremental_responders:.0f}", "Additional responders from treatment", "#16a34a"),
-                    create_small_metric_card("Test Design", split_value, f"{test_duration_weeks} week experiment", "#7c3aed"),
-                ],
-                style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px", "marginBottom": "18px"},
-            ),
-            html.Div(
-                children=[
-                    html.H3(
-                        "Customer List & Export Center",
-                        style={"margin": "0 0 8px 0", "fontSize": "20px", "fontWeight": "900"},
-                    ),
-                    html.P(
-                        "Inspect the exact customers behind this campaign audience. The table shows a clean preview, while the download buttons export the fuller customer list for campaign operations or A/B test setup.",
-                        style={"margin": "0 0 16px 0", "color": COLORS["muted"], "lineHeight": "1.5"},
-                    ),
-                    html.Div(
-                        children=[
-                            html.Div(
-                                children=[
-                                    html.Label(help_label("Audience Type", "Choose which customer list to preview and download: eligible, scale, test, or blocked.")),
-                                    dcc.Dropdown(
-                                        id="ab-audience-type",
-                                        options=[
-                                            {"label": "Eligible customers", "value": "Eligible"},
-                                            {"label": "Scale customers", "value": "Scale"},
-                                            {"label": "Test customers", "value": "Test"},
-                                            {"label": "Blocked customers", "value": "Blocked"},
-                                        ],
-                                        value="Eligible",
-                                        clearable=False,
-                                    ),
-                                ],
-                            ),
-                            html.Div(
-                                children=[
-                                    html.Label("Action", style={"fontWeight": "800"}),
-                                    html.Div(
-                                        children=[
-                                            html.Button(
-                                                "Download CSV",
-                                                id="download-ab-customer-list-button",
-                                                n_clicks=0,
-                                                style={
-                                                    "backgroundColor": COLORS["blue"],
-                                                    "color": "white",
-                                                    "border": "none",
-                                                    "borderRadius": "10px",
-                                                    "padding": "10px 14px",
-                                                    "fontWeight": "900",
-                                                    "cursor": "pointer",
-                                                    "width": "150px",
-                                                },
-                                            ),
-                                            html.Button(
-                                                "Download Excel",
-                                                id="download-ab-customer-list-excel-button",
-                                                n_clicks=0,
-                                                style={
-                                                    "backgroundColor": "#16a34a",
-                                                    "color": "white",
-                                                    "border": "none",
-                                                    "borderRadius": "10px",
-                                                    "padding": "10px 14px",
-                                                    "fontWeight": "900",
-                                                    "cursor": "pointer",
-                                                    "width": "160px",
-                                                },
-                                            ),
-                                        ],
-                                        style={
-                                            "display": "flex",
-                                            "gap": "10px",
-                                            "alignItems": "center",
-                                            "marginTop": "6px",
-                                            "flexWrap": "wrap",
-                                        },
-                                    ),
-                                    dcc.Download(id="download-ab-customer-list"),
-                                    dcc.Download(id="download-ab-customer-list-excel"),
-                                ],
-                            ),
-                        ],
-                        style={
-                            "display": "grid",
-                            "gridTemplateColumns": "1fr",
-                            "gap": "14px",
-                            "marginBottom": "16px",
-                        },
-                    ),
-                    html.Div(id="ab-customer-export-summary"),
-                    dash_table.DataTable(
-                        id="ab-customer-list-table",
-                        columns=[],
-                        data=[],
-                        page_size=8,
-                        sort_action="native",
-                        style_table={"overflowX": "auto"},
-                        style_header={
-                            "backgroundColor": "#f8fafc",
-                            "fontWeight": "900",
-                            "color": COLORS["muted"],
-                            "border": f"1px solid {COLORS['border']}",
-                        },
-                        style_cell={
-                            "padding": "10px",
-                            "fontSize": "13px",
-                            "fontFamily": "Arial",
-                            "border": f"1px solid {COLORS['border']}",
-                            "whiteSpace": "normal",
-                            "height": "auto",
-                            "textAlign": "left",
-                        },
-                        style_data_conditional=[
-                            {
-                                "if": {"filter_query": '{Campaign Action} = "Scale"'},
-                                "backgroundColor": "#f0fdf4",
-                            },
-                            {
-                                "if": {"filter_query": '{Campaign Action} = "Test"'},
-                                "backgroundColor": "#eff6ff",
-                            },
-                            {
-                                "if": {"filter_query": '{Campaign Action} = "Blocked"'},
-                                "backgroundColor": "#fef2f2",
-                            },
-                        ],
-                    ),
-                ],
-                style={
-                    "backgroundColor": "#ffffff",
-                    "border": f"1px solid {COLORS['border']}",
-                    "borderRadius": "18px",
-                    "padding": "18px",
-                    "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.05)",
-                    "marginBottom": "18px",
-                },
-            ),
-            dcc.Graph(figure=ab_fig),
-            html.Div(
-                children=[
-                    html.H4("Experiment Decision", style={"margin": "0 0 8px 0"}),
-                    html.P(recommendation, style={"margin": "0", "lineHeight": "1.55"}),
-                ],
-                style={
-                    "backgroundColor": "#ffffff",
-                    "borderLeft": f"5px solid {rec_color}",
-                    "borderRadius": "14px",
-                    "padding": "18px",
-                    "boxShadow": "0 6px 18px rgba(15, 23, 42, 0.05)",
-                },
-            ),
-        ]
-    )
-
-
-
-
 
 
 @app.callback(
@@ -6441,27 +6011,39 @@ def update_ab_test_planner(campaign_id: str, segment: str, baseline_rate_percent
     Input("ab-campaign", "value"),
     Input("ab-segment", "value"),
     Input("ab-audience-type", "value"),
+    Input("active-customer-data-store", "data"),
 )
-def update_ab_customer_export_preview(campaign_id: str, segment: str, audience_type: str):
-    audience_df = get_campaign_audience_df(campaign_id, segment, audience_type)
+def update_ab_customer_export_preview(campaign_id, segment, audience_type, active_data):
+    master_df = get_active_customer_features(active_data)
 
-    preview_rows = build_customer_export_preview_rows(audience_df, limit=25)
-    columns = [{"name": column, "id": column} for column in preview_rows[0].keys()] if preview_rows else []
+    audience_df = get_campaign_audience_df(
+        campaign_id,
+        segment or "All Segments",
+        audience_type or "Eligible",
+        source_df=master_df,
+    )
 
-    scale_count = int((audience_df.get("campaign_customer_action", pd.Series(dtype=str)) == "Scale").sum()) if not audience_df.empty else 0
-    test_count = int((audience_df.get("campaign_customer_action", pd.Series(dtype=str)) == "Test").sum()) if not audience_df.empty else 0
-    blocked_count = int((audience_df.get("campaign_customer_action", pd.Series(dtype=str)) == "Blocked").sum()) if not audience_df.empty else 0
+    if audience_df.empty:
+        summary = create_zero_state_card(
+            "No customers available for export",
+            "The selected A/B audience returned zero customers in the active master dataset.",
+            "Try All Segments, Eligible audience, or upload a larger file.",
+        )
+        return [], [], summary
+
+    preview_df = format_customer_explorer_preview(audience_df, limit=500)
+    columns = [{"name": column, "id": column} for column in preview_df.columns]
 
     summary = html.Div(
         children=[
-            create_small_metric_card("Preview Rows", f"{min(len(audience_df), 25):,}", "Displayed in table", "#2563eb"),
-            create_small_metric_card("Export Customers", f"{len(audience_df):,}", "Rows included in downloads", "#16a34a"),
-            create_small_metric_card("Scale / Test / Blocked", f"{scale_count:,} / {test_count:,} / {blocked_count:,}", "Campaign action split", "#7c3aed"),
+            create_kpi_card("Export Audience", f"{len(audience_df):,}", "Customers matching A/B audience", "#2563eb"),
+            create_kpi_card("Preview Rows", f"{len(preview_df):,}", "Shown in table preview", "#0ea5e9"),
+            create_kpi_card("Data Source", "Uploaded" if active_data else "Synthetic", "Active master dataset", "#7c3aed"),
         ],
-        style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "12px", "marginBottom": "16px"},
+        style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "14px", "marginBottom": "14px"},
     )
 
-    return preview_rows, columns, summary
+    return preview_df.to_dict("records"), columns, summary
 
 
 @app.callback(
@@ -6470,25 +6052,27 @@ def update_ab_customer_export_preview(campaign_id: str, segment: str, audience_t
     State("ab-campaign", "value"),
     State("ab-segment", "value"),
     State("ab-audience-type", "value"),
+    State("active-customer-data-store", "data"),
     prevent_initial_call=True,
 )
-def download_ab_customer_list(n_clicks: int, campaign_id: str, segment: str, audience_type: str):
+def download_ab_customer_list(n_clicks, campaign_id, segment, audience_type, active_data):
     if not n_clicks:
         raise PreventUpdate
 
-    audience_df = get_campaign_audience_df(campaign_id, segment, audience_type)
+    master_df = get_active_customer_features(active_data)
 
-    if audience_df.empty:
+    export_df = get_campaign_audience_df(
+        campaign_id,
+        segment or "All Segments",
+        audience_type or "Eligible",
+        source_df=master_df,
+    )
+
+    if export_df.empty:
         raise PreventUpdate
 
-    safe_campaign_id = campaign_id if campaign_id not in [None, "None"] else "campaign"
-    safe_segment = str(segment).lower().replace(" ", "_").replace("/", "_")
-    safe_audience = str(audience_type).lower().replace(" ", "_").replace("/", "_")
-
-    filename = f"{safe_campaign_id}_{safe_segment}_{safe_audience}_customer_list.csv"
-
-    return dcc.send_data_frame(audience_df.to_csv, filename, index=False)
-
+    export_df = format_customer_explorer_preview(export_df, limit=len(export_df))
+    return dcc.send_data_frame(export_df.to_csv, "ab_customer_list.csv", index=False)
 
 
 @app.callback(
@@ -6503,6 +6087,7 @@ def download_ab_customer_list(n_clicks: int, campaign_id: str, segment: str, aud
     Input("customer-explorer-card-type", "value"),
     Input("customer-explorer-campaign", "value"),
     Input("customer-explorer-audience-type", "value"),
+    Input("active-customer-data-store", "data"),
 )
 def update_customer_explorer(
     search_text,
@@ -6513,17 +6098,85 @@ def update_customer_explorer(
     card_type,
     campaign_id,
     audience_type,
+    active_data,
 ):
-    explorer_df = build_customer_explorer_dataframe(
-        search_text,
-        segment,
-        decision,
-        risk_band,
-        state,
-        card_type,
-        campaign_id,
-        audience_type,
-    )
+    active_features = get_active_customer_features(active_data)
+    explorer_df = active_features.copy()
+
+    # Campaign targeting layer, applied to the active dataset.
+    if campaign_id and campaign_id != "None" and not campaign_recommendations.empty:
+        campaign_match = campaign_recommendations[
+            campaign_recommendations["campaign_id"] == campaign_id
+        ]
+
+        if not campaign_match.empty:
+            selected_campaign = campaign_match.iloc[0]
+            target_segments = split_semicolon_values(selected_campaign.get("target_segments", ""))
+            excluded_segments = split_semicolon_values(selected_campaign.get("excluded_segments", ""))
+
+            if target_segments and "customer_segment" in explorer_df.columns:
+                explorer_df = explorer_df[
+                    explorer_df["customer_segment"].isin(target_segments)
+                ].copy()
+
+            if excluded_segments and "customer_segment" in explorer_df.columns:
+                explorer_df = explorer_df[
+                    ~explorer_df["customer_segment"].isin(excluded_segments)
+                ].copy()
+
+            if audience_type == "Eligible" and "decision_status" in explorer_df.columns:
+                explorer_df = explorer_df[
+                    explorer_df["decision_status"].isin(["Scale", "Test"])
+                ].copy()
+            elif audience_type == "Scale" and "decision_status" in explorer_df.columns:
+                explorer_df = explorer_df[explorer_df["decision_status"] == "Scale"].copy()
+            elif audience_type == "Test" and "decision_status" in explorer_df.columns:
+                explorer_df = explorer_df[explorer_df["decision_status"] == "Test"].copy()
+            elif audience_type == "Blocked" and "decision_status" in explorer_df.columns:
+                explorer_df = explorer_df[explorer_df["decision_status"] == "Block"].copy()
+
+    # Manual filters.
+    if segment and segment != "All Segments" and "customer_segment" in explorer_df.columns:
+        explorer_df = explorer_df[explorer_df["customer_segment"] == segment].copy()
+
+    if decision and decision != "All Decisions" and "decision_status" in explorer_df.columns:
+        explorer_df = explorer_df[explorer_df["decision_status"] == decision].copy()
+
+    if risk_band and risk_band != "All Risk Bands" and "risk_band" in explorer_df.columns:
+        explorer_df = explorer_df[explorer_df["risk_band"] == risk_band].copy()
+
+    if state and state != "All States" and "state" in explorer_df.columns:
+        explorer_df = explorer_df[explorer_df["state"] == state].copy()
+
+    if card_type and card_type != "All Card Types" and "card_type" in explorer_df.columns:
+        explorer_df = explorer_df[explorer_df["card_type"] == card_type].copy()
+
+    if search_text:
+        search_value = str(search_text).strip().lower()
+        searchable_columns = [
+            column for column in [
+                "customer_id",
+                "customer_name",
+                "customer_email",
+                "city",
+                "state",
+                "customer_segment",
+                "decision_status",
+                "risk_band",
+                "recommended_action",
+                "card_type",
+                "rewards_preference",
+            ]
+            if column in explorer_df.columns
+        ]
+
+        if searchable_columns:
+            search_mask = pd.Series(False, index=explorer_df.index)
+
+            for column in searchable_columns:
+                search_mask = search_mask | explorer_df[column].astype(str).str.lower().str.contains(search_value, na=False)
+
+            explorer_df = explorer_df[search_mask].copy()
 
     if explorer_df.empty:
         summary = create_zero_state_card(
@@ -6559,6 +6212,7 @@ def update_customer_explorer(
     columns = [{"name": column, "id": column} for column in preview_df.columns]
 
     return summary, preview_df.to_dict("records"), columns
+
 
 
 @app.callback(
@@ -6660,27 +6314,27 @@ def download_customer_explorer_excel(
     State("ab-campaign", "value"),
     State("ab-segment", "value"),
     State("ab-audience-type", "value"),
+    State("active-customer-data-store", "data"),
     prevent_initial_call=True,
 )
-def download_ab_customer_list_excel(n_clicks: int, campaign_id: str, segment: str, audience_type: str):
+def download_ab_customer_list_excel(n_clicks, campaign_id, segment, audience_type, active_data):
     if not n_clicks:
         raise PreventUpdate
 
-    audience_df = get_campaign_audience_df(campaign_id, segment, audience_type)
+    master_df = get_active_customer_features(active_data)
 
-    if audience_df.empty:
+    export_df = get_campaign_audience_df(
+        campaign_id,
+        segment or "All Segments",
+        audience_type or "Eligible",
+        source_df=master_df,
+    )
+
+    if export_df.empty:
         raise PreventUpdate
 
-    safe_campaign_id = campaign_id if campaign_id not in [None, "None"] else "campaign"
-    safe_segment = str(segment).lower().replace(" ", "_").replace("/", "_")
-    safe_audience = str(audience_type).lower().replace(" ", "_").replace("/", "_")
-
-    filename = f"{safe_campaign_id}_{safe_segment}_{safe_audience}_customer_list.xlsx"
-
-    return dcc.send_data_frame(audience_df.to_excel, filename, index=False)
-
-
-
+    export_df = format_customer_explorer_preview(export_df, limit=len(export_df))
+    return dcc.send_data_frame(export_df.to_excel, "ab_customer_list.xlsx", index=False, engine="openpyxl")
 
 
 @app.callback(
@@ -6771,172 +6425,651 @@ def navigate_from_dashboard_guides(
 
 
 
+
 @app.callback(
     Output("filtered-summary-output", "children"),
     Input("filter-segment", "value"),
     Input("filter-decision", "value"),
     Input("filter-risk", "value"),
     Input("filter-action", "value"),
+    Input("active-customer-data-store", "data"),
 )
-def update_filtered_summary(selected_segments, selected_decisions, selected_risks, selected_actions):
-    filtered = customer_features.copy()
+def update_filtered_summary(selected_segments, selected_decisions, selected_risks, selected_actions, active_data):
+    active_features = get_active_customer_features(active_data)
+    filtered = apply_global_filters(
+        selected_segments,
+        selected_decisions,
+        selected_risks,
+        selected_actions,
+        active_features,
+    )
 
-    active_filters = []
+    def safe_sum(column_name):
+        if column_name in filtered.columns:
+            return pd.to_numeric(filtered[column_name], errors="coerce").fillna(0).sum()
+        return 0
 
-    if selected_segments:
-        filtered = filtered[filtered["customer_segment"].isin(selected_segments)]
-        active_filters.append("Segment: " + ", ".join(selected_segments))
+    def safe_count_decision(values):
+        if "decision_status" not in filtered.columns:
+            return 0
+        return int(filtered["decision_status"].isin(values).sum())
 
-    if selected_decisions:
-        filtered = filtered[filtered["decision_status"].isin(selected_decisions)]
-        active_filters.append("Decision: " + ", ".join(selected_decisions))
+    total_customers = int(len(filtered))
+    total_spend = safe_sum("monthly_spend")
+    total_profit = safe_sum("risk_adjusted_profit")
+    eligible_count = safe_count_decision(["Scale", "Test"])
+    blocked_count = safe_count_decision(["Block"])
 
-    if selected_risks:
-        filtered = filtered[filtered["risk_band"].isin(selected_risks)]
-        active_filters.append("Risk: " + ", ".join(selected_risks))
+    eligible_rate = (eligible_count / total_customers * 100) if total_customers else 0
+    block_rate = (blocked_count / total_customers * 100) if total_customers else 0
 
-    if selected_actions:
-        filtered = filtered[filtered["recommended_action"].isin(selected_actions)]
-        active_filters.append("Action: " + ", ".join(selected_actions))
+    mode_label = "Uploaded active file" if active_data else "Synthetic demo portfolio"
 
-    customer_count = len(filtered)
-
-    if active_filters:
-        summary_title = "Filtered Portfolio Summary"
-        view_note = "Current view: " + " | ".join(active_filters)
-        view_badge = "Filtered View"
-        badge_color = "#2563eb"
-    else:
-        summary_title = "Full Portfolio Summary"
-        view_note = "Current view: All customers in the portfolio"
-        view_badge = "Full Portfolio View"
-        badge_color = "#16a34a"
-
-    if customer_count == 0:
+    def live_card(title, value, subtitle, accent):
         return html.Div(
             children=[
-                html.H4("No customers match the selected filters", style={"margin": "0 0 6px 0"}),
-                html.P(
-                    "Try removing one or more filters to expand the portfolio view.",
-                    style={"margin": "0", "color": COLORS["muted"]},
+                html.Div(
+                    style={
+                        "width": "42px",
+                        "height": "4px",
+                        "borderRadius": "999px",
+                        "backgroundColor": accent,
+                        "marginBottom": "10px",
+                    }
                 ),
+                html.Div(title, style={"fontSize": "12px", "fontWeight": "900", "color": COLORS["muted"], "textTransform": "uppercase"}),
+                html.Div(value, style={"fontSize": "26px", "fontWeight": "900", "marginTop": "6px", "color": COLORS["text"]}),
+                html.Div(subtitle, style={"fontSize": "13px", "color": COLORS["muted"], "marginTop": "5px"}),
             ],
             style={
-                "backgroundColor": "#fff7ed",
-                "border": "1px solid #fed7aa",
+                "backgroundColor": "#ffffff",
+                "border": f"1px solid {COLORS['border']}",
                 "borderRadius": "16px",
-                "padding": "18px",
+                "padding": "16px",
+                "boxShadow": "0 8px 20px rgba(15, 23, 42, 0.05)",
             },
         )
-
-    total_spend = filtered["monthly_spend"].sum()
-    total_profit = filtered["risk_adjusted_profit"].sum()
-    avg_default_probability = filtered["default_probability"].mean()
-    eligible_rate = filtered["campaign_eligible_flag"].mean()
-    block_rate = (filtered["decision_status"] == "Block").mean()
 
     return html.Div(
         children=[
             html.Div(
                 children=[
-                    html.Div(
-                        children=[
-                            html.Div(
-                                summary_title,
-                                style={
-                                    "fontSize": "13px",
-                                    "fontWeight": "900",
-                                    "textTransform": "uppercase",
-                                    "letterSpacing": "1px",
-                                    "color": COLORS["blue"],
-                                },
-                            ),
-                            html.Div(
-                                view_badge,
-                                style={
-                                    "fontSize": "12px",
-                                    "fontWeight": "900",
-                                    "color": "white",
-                                    "backgroundColor": badge_color,
-                                    "borderRadius": "999px",
-                                    "padding": "6px 10px",
-                                },
-                            ),
-                        ],
-                        style={
-                            "display": "flex",
-                            "alignItems": "center",
-                            "justifyContent": "space-between",
-                            "marginBottom": "8px",
-                        },
-                    ),
-                    html.Div(
-                        view_note,
-                        style={
-                            "fontSize": "13px",
-                            "color": COLORS["muted"],
-                            "marginBottom": "14px",
-                            "lineHeight": "1.45",
-                        },
-                    ),
-                    html.Div(
-                        children=[
-                            create_small_metric_card(
-                                "Filtered Customers",
-                                f"{customer_count:,}",
-                                "Customers matching current filters",
-                                "#2563eb",
-                            ),
-                            create_small_metric_card(
-                                "Monthly Spend",
-                                f"${total_spend:,.0f}",
-                                "Spend from filtered customers",
-                                "#0ea5e9",
-                            ),
-                            create_small_metric_card(
-                                "Risk-Adjusted Profit",
-                                f"${total_profit:,.0f}",
-                                "Profit after expected credit loss",
-                                "#16a34a",
-                            ),
-                            create_small_metric_card(
-                                "Avg Default Probability",
-                                f"{avg_default_probability * 100:.2f}%",
-                                "Average risk level in filtered view",
-                                "#f97316",
-                            ),
-                            create_small_metric_card(
-                                "Eligible Rate",
-                                f"{eligible_rate * 100:.1f}%",
-                                "Share marked Scale or Test",
-                                "#7c3aed",
-                            ),
-                            create_small_metric_card(
-                                "Block Rate",
-                                f"{block_rate * 100:.1f}%",
-                                "Share blocked by guardrails",
-                                "#dc2626",
-                            ),
-                        ],
-                        style={
-                            "display": "grid",
-                            "gridTemplateColumns": "repeat(6, 1fr)",
-                            "gap": "12px",
-                        },
+                    html.Strong(f"Active view: {mode_label}"),
+                    html.Span(
+                        f" | Current filtered population: {total_customers:,} customers",
+                        style={"color": COLORS["muted"]},
                     ),
                 ],
                 style={
-                    "backgroundColor": "#ffffff",
-                    "border": f"1px solid {COLORS['border']}",
-                    "borderRadius": "20px",
-                    "padding": "20px",
-                    "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                    "gridColumn": "1 / -1",
+                    "backgroundColor": "#eff6ff" if active_data else "#f8fafc",
+                    "border": "1px solid #bfdbfe" if active_data else f"1px solid {COLORS['border']}",
+                    "borderRadius": "14px",
+                    "padding": "12px 14px",
+                    "fontSize": "14px",
+                    "marginBottom": "2px",
                 },
-            )
-        ]
+            ),
+            live_card("Filtered Customers", f"{total_customers:,}", "After active filters", "#2563eb"),
+            live_card("Monthly Spend", f"${total_spend:,.0f}", "Filtered portfolio spend", "#0ea5e9"),
+            live_card("Risk-Adjusted Profit", f"${total_profit:,.0f}", "Profit after risk cost", "#16a34a"),
+            live_card("Scale/Test Rate", f"{eligible_rate:.1f}%", f"{eligible_count:,} eligible customers", "#7c3aed"),
+            live_card("Block Rate", f"{block_rate:.1f}%", f"{blocked_count:,} protected customers", "#dc2626"),
+        ],
+        style={
+            "display": "grid",
+            "gridTemplateColumns": "repeat(5, 1fr)",
+            "gap": "14px",
+            "marginTop": "14px",
+            "marginBottom": "14px",
+        },
+    )
+
+
+def build_priority_segment_rows_from_active_data(df: pd.DataFrame) -> list[dict]:
+    """Build the Segment Strategy priority table from the active master dataset."""
+    if df is None or df.empty or "customer_segment" not in df.columns:
+        return []
+
+    working = df.copy()
+
+    for column in ["risk_adjusted_profit", "expected_roi"]:
+        if column not in working.columns:
+            working[column] = 0
+        working[column] = pd.to_numeric(working[column], errors="coerce").fillna(0)
+
+    if "decision_status" not in working.columns:
+        working["decision_status"] = "Unknown"
+
+    working["scale_flag"] = (working["decision_status"] == "Scale").astype(int)
+    working["test_flag"] = (working["decision_status"] == "Test").astype(int)
+    working["eligible_flag"] = working["decision_status"].isin(["Scale", "Test"]).astype(int)
+
+    grouped = (
+        working.groupby("customer_segment", as_index=False)
+        .agg(
+            customer_count=("customer_segment", "size"),
+            avg_risk_adjusted_profit=("risk_adjusted_profit", "mean"),
+            avg_expected_roi=("expected_roi", "mean"),
+            scale_count=("scale_flag", "sum"),
+            test_count=("test_flag", "sum"),
+            eligible_count=("eligible_flag", "sum"),
+        )
+    )
+
+    grouped["campaign_eligible_rate"] = grouped["eligible_count"] / grouped["customer_count"] * 100
+    grouped = grouped.sort_values(["campaign_eligible_rate", "customer_count"], ascending=[False, False])
+
+    rows = []
+    for _, row in grouped.iterrows():
+        rows.append(
+            {
+                "Customer Segment": row["customer_segment"],
+                "Customer Count": f"{int(row['customer_count']):,}",
+                "Avg Risk Adjusted Profit": format_currency(row["avg_risk_adjusted_profit"]),
+                "Avg Expected Roi": f"{row['avg_expected_roi']:.1f}",
+                "Scale Count": f"{int(row['scale_count']):,}",
+                "Test Count": f"{int(row['test_count']):,}",
+                "Campaign Eligible Rate": f"{row['campaign_eligible_rate']:.1f}%",
+            }
+        )
+
+    return rows
+
+
+@app.callback(
+    Output("priority-segment-table-container", "children"),
+    Input("active-customer-data-store", "data"),
+)
+def update_priority_segment_table(active_data):
+    master_df = get_active_customer_features(active_data)
+    rows = build_priority_segment_rows_from_active_data(master_df)
+
+    if not rows:
+        return create_zero_state_card(
+            "No segment table available",
+            "The active master dataset does not contain enough segment information.",
+            "Upload a valid customer file or return to the synthetic demo portfolio.",
+        )
+
+    return create_table(rows)
+
+
+@app.callback(
+    Output("data-source-mode-title", "children"),
+    Output("data-source-mode-description", "children"),
+    Input("active-data-mode-store", "data"),
+)
+def update_data_source_mode_text(mode_data):
+    if mode_data and mode_data.get("mode") == "uploaded":
+        filename = mode_data.get("filename", "uploaded file")
+        rows = mode_data.get("rows", 0)
+        return (
+            "Uploaded customer file active",
+            f"The dashboard is currently powered by {filename}. {rows:,} uploaded customers were scored through the decision engine and stored as the active master dataset.",
+        )
+
+    return (
+        "Synthetic demo portfolio",
+        "The dashboard is currently powered by the built-in synthetic customer portfolio. Upload a valid CSV or Excel file to replace the active master dataset.",
     )
 
 
 
+
+
+CAMPAIGN_PROFIT_COLUMNS = [
+    "expected_profit",
+    "projected_profit",
+    "campaign_profit",
+    "profit",
+    "expected_campaign_profit",
+    "incremental_profit",
+]
+
+CAMPAIGN_ROI_COLUMNS = [
+    "expected_roi",
+    "roi",
+    "campaign_roi",
+    "projected_roi",
+]
+
+
+def get_first_numeric_campaign_value(row_dict: dict, candidate_columns: list[str], default: float = 0) -> float:
+    """Return first available numeric campaign metric from possible column names."""
+    for column in candidate_columns:
+        if column in row_dict:
+            value = pd.to_numeric(pd.Series([row_dict.get(column)]), errors="coerce").fillna(default).iloc[0]
+            return float(value)
+    return float(default)
+
+
+def set_campaign_metric_aliases(row_dict: dict, profit_value: float, roi_value: float) -> dict:
+    """Keep campaign KPI, chart, card, and table views reading the same numbers."""
+    for column in CAMPAIGN_PROFIT_COLUMNS:
+        row_dict[column] = float(profit_value)
+
+    for column in CAMPAIGN_ROI_COLUMNS:
+        row_dict[column] = float(roi_value)
+
+    return row_dict
+
+
+def parse_customer_id_set(value) -> set[str]:
+    if value is None or pd.isna(value):
+        return set()
+
+    return {
+        item.strip()
+        for item in str(value).split(";")
+        if item.strip()
+    }
+
+
+
+
+def get_campaign_economics_profile(campaign_dict: dict) -> dict:
+    """Return simple economic assumptions by campaign family/risk type."""
+    family = str(campaign_dict.get("campaign_family", "")).lower()
+    risk_level = str(campaign_dict.get("risk_level", "")).lower()
+
+    profile = {
+        "spend_lift_rate": 0.010,
+        "profit_capture_rate": 0.08,
+        "cost_per_customer": 2.00,
+        "risk_penalty_multiplier": 0.015,
+    }
+
+    if "dining" in family or "merchant" in family:
+        profile.update(
+            {
+                "spend_lift_rate": 0.025,
+                "profit_capture_rate": 0.10,
+                "cost_per_customer": 3.00,
+                "risk_penalty_multiplier": 0.010,
+            }
+        )
+    elif "retention" in family or "loyalty" in family:
+        profile.update(
+            {
+                "spend_lift_rate": 0.010,
+                "profit_capture_rate": 0.22,
+                "cost_per_customer": 5.00,
+                "risk_penalty_multiplier": 0.008,
+            }
+        )
+    elif "balance" in family or "revolver" in family:
+        profile.update(
+            {
+                "spend_lift_rate": 0.018,
+                "profit_capture_rate": 0.18,
+                "cost_per_customer": 4.00,
+                "risk_penalty_multiplier": 0.030,
+            }
+        )
+    elif "credit line" in family:
+        profile.update(
+            {
+                "spend_lift_rate": 0.015,
+                "profit_capture_rate": 0.16,
+                "cost_per_customer": 4.00,
+                "risk_penalty_multiplier": 0.040,
+            }
+        )
+    elif "servicing" in family or "enrollment" in family:
+        profile.update(
+            {
+                "spend_lift_rate": 0.004,
+                "profit_capture_rate": 0.12,
+                "cost_per_customer": 1.50,
+                "risk_penalty_multiplier": 0.006,
+            }
+        )
+
+    if "high" in risk_level:
+        profile["risk_penalty_multiplier"] *= 1.35
+    elif "low" in risk_level:
+        profile["risk_penalty_multiplier"] *= 0.75
+
+    return profile
+
+
+def calculate_campaign_economics_from_customers(campaign_dict: dict, eligible_df: pd.DataFrame) -> tuple[float, float, float]:
+    """Calculate expected campaign profit, ROI, and score from active customer-level economics."""
+    if eligible_df is None or eligible_df.empty:
+        return 0.0, 0.0, -999.0
+
+    profile = get_campaign_economics_profile(campaign_dict)
+
+    monthly_spend = pd.to_numeric(
+        eligible_df["monthly_spend"] if "monthly_spend" in eligible_df.columns else 0,
+        errors="coerce",
+    ).fillna(0)
+
+    risk_adjusted_profit = pd.to_numeric(
+        eligible_df["risk_adjusted_profit"] if "risk_adjusted_profit" in eligible_df.columns else 0,
+        errors="coerce",
+    ).fillna(0)
+
+    default_probability = pd.to_numeric(
+        eligible_df["default_probability"] if "default_probability" in eligible_df.columns else 0,
+        errors="coerce",
+    ).fillna(0)
+
+    customers = int(len(eligible_df))
+    total_spend = float(monthly_spend.sum())
+    total_profit = float(risk_adjusted_profit.sum())
+    avg_default_probability = float(default_probability.mean()) if customers else 0.0
+
+    interchange_margin_rate = 0.018
+    incremental_margin = total_spend * profile["spend_lift_rate"] * interchange_margin_rate
+    retained_profit_value = total_profit * profile["profit_capture_rate"]
+    campaign_cost = customers * profile["cost_per_customer"]
+    risk_penalty = total_spend * avg_default_probability * profile["risk_penalty_multiplier"]
+
+    expected_profit = incremental_margin + retained_profit_value - campaign_cost - risk_penalty
+    expected_roi = expected_profit / campaign_cost if campaign_cost > 0 else 0.0
+
+    # Keep score interpretable: economics + safer risk + larger matched opportunity.
+    score = (
+        expected_profit
+        + (expected_roi * 8)
+        + (customers * 2)
+        - (avg_default_probability * 100)
+    )
+
+    return float(expected_profit), float(expected_roi), float(score)
+
+
+
+def build_active_campaign_recommendations(master_df: pd.DataFrame) -> pd.DataFrame:
+    """Recalculate campaign recommendation counts and economics from the active master dataset."""
+    if campaign_recommendations.empty or master_df is None or master_df.empty:
+        return pd.DataFrame()
+
+    active_rows = []
+
+    for _, campaign in campaign_recommendations.copy().iterrows():
+        campaign_dict = campaign.to_dict()
+
+        audience_df = master_df.copy()
+
+        target_segments = split_semicolon_values(campaign_dict.get("target_segments", ""))
+        excluded_segments = split_semicolon_values(campaign_dict.get("excluded_segments", ""))
+
+        if target_segments and "customer_segment" in audience_df.columns:
+            audience_df = audience_df[audience_df["customer_segment"].isin(target_segments)].copy()
+
+        if excluded_segments and "customer_segment" in audience_df.columns:
+            audience_df = audience_df[~audience_df["customer_segment"].isin(excluded_segments)].copy()
+
+        if "decision_status" in audience_df.columns:
+            eligible_df = audience_df[audience_df["decision_status"].isin(["Scale", "Test"])].copy()
+            scale_df = audience_df[audience_df["decision_status"] == "Scale"].copy()
+            blocked_df = audience_df[audience_df["decision_status"] == "Block"].copy()
+        else:
+            eligible_df = audience_df.copy()
+            scale_df = audience_df.iloc[0:0].copy()
+            blocked_df = audience_df.iloc[0:0].copy()
+
+        eligible_customers = int(len(eligible_df))
+        scale_customers = int(len(scale_df))
+        blocked_customers = int(len(blocked_df))
+
+        expected_profit, expected_roi, active_campaign_score = calculate_campaign_economics_from_customers(
+            campaign_dict,
+            eligible_df,
+        )
+
+        campaign_dict["eligible_customers"] = eligible_customers
+        campaign_dict["scale_customers"] = scale_customers
+        campaign_dict["blocked_customers"] = blocked_customers
+        campaign_dict["eligible_customer_ids"] = ";".join(sorted(eligible_df["customer_id"].astype(str).unique())) if "customer_id" in eligible_df.columns else ""
+        campaign_dict["scale_customer_ids"] = ";".join(sorted(scale_df["customer_id"].astype(str).unique())) if "customer_id" in scale_df.columns else ""
+        campaign_dict["blocked_customer_ids"] = ";".join(sorted(blocked_df["customer_id"].astype(str).unique())) if "customer_id" in blocked_df.columns else ""
+        campaign_dict["active_unique_customers"] = int(master_df["customer_id"].nunique()) if "customer_id" in master_df.columns else int(len(master_df))
+        campaign_dict = set_campaign_metric_aliases(campaign_dict, expected_profit, expected_roi)
+        campaign_dict["campaign_score"] = active_campaign_score
+        campaign_dict["active_campaign_score"] = active_campaign_score
+
+        # Do not recommend campaigns with no active audience.
+        if eligible_customers > 0:
+            active_rows.append(campaign_dict)
+
+    if not active_rows:
+        return pd.DataFrame()
+
+    active_df = pd.DataFrame(active_rows)
+
+    if "campaign_score" in active_df.columns:
+        active_df["campaign_score"] = pd.to_numeric(active_df["campaign_score"], errors="coerce").fillna(-999)
+        active_df["expected_profit"] = pd.to_numeric(active_df["expected_profit"], errors="coerce").fillna(0)
+        active_df = active_df.sort_values(["campaign_score", "expected_profit"], ascending=[False, False])
+    elif "expected_profit" in active_df.columns:
+        active_df["expected_profit"] = pd.to_numeric(active_df["expected_profit"], errors="coerce").fillna(0)
+        active_df = active_df.sort_values("expected_profit", ascending=False)
+
+    active_df = active_df.reset_index(drop=True)
+    active_df["rank"] = active_df.index + 1
+    active_df["dashboard_recommendation_rank"] = active_df["rank"]
+
+    return active_df
+
+
+def empty_campaign_figure(title: str, message: str = "No campaign recommendations available for the active dataset."):
+    fig = go.Figure()
+    fig.add_annotation(
+        text=message,
+        x=0.5,
+        y=0.5,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        font={"size": 14, "color": COLORS["muted"]},
+    )
+    fig.update_layout(
+        title=title,
+        height=380,
+        margin={"l": 50, "r": 30, "t": 70, "b": 50},
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+    )
+    return fig
+
+
+@app.callback(
+    Output("campaign-kpi-container", "children"),
+    Output("campaign-family-mix-chart", "figure"),
+    Output("campaign-rollout-mix-chart", "figure"),
+    Output("campaign-profit-chart", "figure"),
+    Output("campaign-top-cards-container", "children"),
+    Output("campaign-table-container", "children"),
+    Output("campaign-detail-container", "children"),
+    Input("active-customer-data-store", "data"),
+)
+def update_campaigns_from_active_master(active_data):
+    master_df = get_active_customer_features(active_data)
+    active_campaigns = build_active_campaign_recommendations(master_df)
+
+    total_templates = len(campaign_library) if not campaign_library.empty else len(campaign_recommendations)
+
+    if active_campaigns.empty:
+        kpis = [
+            create_kpi_card("Campaign Templates", f"{total_templates:,}", "Available campaign options scored", "#2563eb"),
+            create_kpi_card("Active Recommendations", "0", "No matching active customer audience", "#dc2626"),
+            create_kpi_card("Eligible Customers", "0", "Customer-campaign matches passing guardrails", "#7c3aed"),
+            create_kpi_card("Scale Customers", "0", "Customers recommended for broad rollout", "#0ea5e9"),
+        ]
+
+        empty_fig = empty_campaign_figure("No active campaign recommendations")
+        zero_state = create_zero_state_card(
+            "No campaign recommendations available",
+            "The active master dataset does not match any campaign audience rules.",
+            "Try All Segments, upload a larger file, or review campaign target-segment rules.",
+        )
+
+        return kpis, empty_fig, empty_fig, empty_fig, zero_state, zero_state, zero_state
+
+    top10 = active_campaigns.head(10).copy()
+
+    top_campaign_profit = float(pd.to_numeric(top10["expected_profit"], errors="coerce").fillna(0).sum())
+    top_campaign_eligible = int(pd.to_numeric(top10["eligible_customers"], errors="coerce").fillna(0).sum())
+    top_campaign_scale = int(pd.to_numeric(top10["scale_customers"], errors="coerce").fillna(0).sum())
+
+    unique_covered_customer_ids = set()
+    if "eligible_customer_ids" in top10.columns:
+        for ids in top10["eligible_customer_ids"]:
+            unique_covered_customer_ids.update(parse_customer_id_set(ids))
+
+    unique_customers_covered = len(unique_covered_customer_ids)
+
+    kpis = [
+        create_kpi_card("Campaign Templates", f"{total_templates:,}", "Available campaign options scored", "#2563eb"),
+        create_kpi_card("Unique Customers Covered", f"{unique_customers_covered:,}", "Unique people appearing in top campaign opportunities", "#0ea5e9"),
+        create_kpi_card("Top-10 Customer-Campaign Matches", f"{top_campaign_eligible:,}", "Customers can appear in more than one campaign", "#7c3aed"),
+        create_kpi_card("Top-10 Expected Profit", format_currency(top_campaign_profit), "Projected profit from active recommendations", "#16a34a"),
+    ]
+
+    if "campaign_family" in top10.columns:
+        family_counts = top10["campaign_family"].fillna("Unknown").value_counts().reset_index()
+        family_counts.columns = ["campaign_family", "campaigns"]
+        family_fig = px.bar(
+            family_counts.sort_values("campaigns", ascending=True),
+            x="campaigns",
+            y="campaign_family",
+            orientation="h",
+            title="Top Campaign Families",
+            text="campaigns",
+        )
+        family_fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+        family_fig.update_layout(showlegend=False, height=380, margin={"l": 50, "r": 30, "t": 70, "b": 50})
+    else:
+        family_fig = empty_campaign_figure("Top Campaign Families")
+
+    rollout_col = None
+    for candidate_col in [
+        "recommended_rollout_decision",
+        "rollout_recommendation",
+        "recommended_rollout",
+        "rollout",
+    ]:
+        if candidate_col in top10.columns:
+            rollout_col = candidate_col
+            break
+
+    if rollout_col:
+        rollout_counts = top10[rollout_col].fillna("Unknown").astype(str).value_counts().reset_index()
+        rollout_counts.columns = ["rollout", "campaigns"]
+        rollout_fig = px.pie(
+            rollout_counts,
+            names="rollout",
+            values="campaigns",
+            hole=0.55,
+            title="Recommended Rollout Mix",
+        )
+        rollout_fig.update_traces(textposition="inside", textinfo="percent+label")
+        rollout_fig.update_layout(height=380, margin={"l": 50, "r": 30, "t": 70, "b": 50})
+    else:
+        rollout_fig = empty_campaign_figure(
+            "Recommended Rollout Mix",
+            "No rollout decision column was found for the active campaign recommendations.",
+        )
+
+    campaign_name_col = "campaign_name" if "campaign_name" in top10.columns else "campaign"
+    if campaign_name_col in top10.columns:
+        profit_fig = px.bar(
+            top10.sort_values("expected_profit", ascending=True),
+            x="expected_profit",
+            y=campaign_name_col,
+            orientation="h",
+            title="Expected Campaign Profit by Recommendation",
+            text="expected_profit",
+        )
+        profit_fig.update_traces(texttemplate="$%{text:,.0f}", textposition="outside")
+        profit_fig.update_layout(showlegend=False, height=520, margin={"l": 80, "r": 40, "t": 70, "b": 50}, xaxis_title="Expected Profit", yaxis_title="Campaign")
+    else:
+        profit_fig = empty_campaign_figure("Expected Campaign Profit by Recommendation")
+
+    top_cards = [
+        html.Div(
+            children=[
+                html.Strong("How to read this section: "),
+                "this page ranks campaign opportunities. One customer can qualify for multiple campaigns, so campaign-level counts are customer-campaign matches, not unique customer counts.",
+            ],
+            style={
+                "gridColumn": "1 / -1",
+                "backgroundColor": "#eff6ff",
+                "border": "1px solid #bfdbfe",
+                "borderRadius": "14px",
+                "padding": "12px 14px",
+                "color": "#1e3a8a",
+                "lineHeight": "1.45",
+            },
+        )
+    ] + [
+        create_campaign_recommendation_card(row)
+        for _, row in top10.iterrows()
+    ]
+
+    try:
+        table_rows = create_campaign_table_rows(top10)
+    except Exception:
+        table_rows = top10.to_dict("records")
+
+    cleaned_table_rows = []
+    for row in table_rows:
+        row = dict(row)
+        if "Eligible Customers" in row:
+            row["Customer-Campaign Matches"] = row.pop("Eligible Customers")
+        if "Scale Customers" in row:
+            row["Scale Matches"] = row.pop("Scale Customers")
+        if "Blocked Customers" in row:
+            row["Blocked Matches"] = row.pop("Blocked Customers")
+        cleaned_table_rows.append(row)
+
+    table = create_table(cleaned_table_rows)
+    detail = create_campaign_detail_panel(top10)
+
+    return kpis, family_fig, rollout_fig, profit_fig, top_cards, table, detail
+
+
+
+
+@app.callback(
+    Output("top-kpi-container", "children"),
+    Input("active-customer-data-store", "data"),
+)
+def update_top_kpi_row(active_data):
+    master_df = get_active_customer_features(active_data)
+
+    total_customers = int(len(master_df))
+
+    def safe_sum(column_name):
+        if column_name in master_df.columns:
+            return float(pd.to_numeric(master_df[column_name], errors="coerce").fillna(0).sum())
+        return 0.0
+
+    total_spend = safe_sum("monthly_spend")
+    total_profit = safe_sum("risk_adjusted_profit")
+
+    if total_customers and "decision_status" in master_df.columns:
+        eligible_count = int(master_df["decision_status"].isin(["Scale", "Test"]).sum())
+        blocked_count = int((master_df["decision_status"] == "Block").sum())
+        eligible_rate = eligible_count / total_customers
+        block_rate = blocked_count / total_customers
+    else:
+        eligible_rate = 0
+        block_rate = 0
+
+    return [
+        create_kpi_card("Total Customers", f"{total_customers:,}", "Customers in active master dataset", "#2563eb"),
+        create_kpi_card("Monthly Spend", format_currency(total_spend), "Total card portfolio spend", "#0ea5e9"),
+        create_kpi_card("Risk-Adjusted Profit", format_currency(total_profit), "Monthly profit after risk cost", "#16a34a"),
+        create_kpi_card("Campaign Eligible", format_percent(eligible_rate), "Scale or Test customers", "#7c3aed"),
+        create_kpi_card("Blocked by Guardrails", format_percent(block_rate), "Protected from growth offers", "#dc2626"),
+    ]
+
+
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host="127.0.0.1", port=8050)
