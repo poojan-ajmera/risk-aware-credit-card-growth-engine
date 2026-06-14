@@ -6726,7 +6726,7 @@ def navigate_from_dashboard_guides(
     route_map = {
         "guide-open-overview": ("overview", "customer-lookup"),
         "guide-open-campaigns": ("campaigns-offers", "customer-lookup"),
-        "guide-open-scenario": ("decision-workbench", "scenario"),
+        "guide-open-scenario": ("decision-workbench", "scenario-simulator"),
         "guide-open-ab": ("decision-workbench", "ab-test-planner"),
         "guide-open-export": ("decision-workbench", "customer-explorer"),
         "guide-open-guardrails": ("guardrails", "customer-lookup"),
@@ -6735,13 +6735,13 @@ def navigate_from_dashboard_guides(
         "action-open-customer-tools": ("decision-workbench", "customer-explorer"),
         "action-open-guardrails": ("guardrails", "customer-lookup"),
 
-        "cta-open-scenario": ("decision-workbench", "scenario"),
+        "cta-open-scenario": ("decision-workbench", "scenario-simulator"),
         "cta-open-ab": ("decision-workbench", "ab-test-planner"),
         "cta-open-audience": ("decision-workbench", "customer-explorer"),
         "cta-open-guardrails": ("guardrails", "customer-lookup"),
 
         "cta-playbook-campaigns": ("campaigns-offers", "customer-lookup"),
-        "cta-playbook-scenario": ("decision-workbench", "scenario"),
+        "cta-playbook-scenario": ("decision-workbench", "scenario-simulator"),
         "cta-playbook-audience": ("decision-workbench", "customer-explorer"),
         "cta-playbook-guardrails": ("guardrails", "customer-lookup"),
 
