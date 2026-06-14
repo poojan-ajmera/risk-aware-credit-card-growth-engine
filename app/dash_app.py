@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 import sys
 
 from pathlib import Path
@@ -16,7 +18,7 @@ import io
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, MATCH, callback_context, dcc, html, dash_table, no_update
+from dash import Dash, Input, Output, State, MATCH, ALL, callback_context, dcc, html, dash_table, no_update
 from dash.exceptions import PreventUpdate
 
 
@@ -4684,6 +4686,229 @@ app.layout = html.Div(
                         ),
                         html.Div(
                             children=[
+                                html.Div(
+                                    className="magic-cube-left-card",
+                                    children=[
+                                        html.Div(
+                                            "MAGIC PORTFOLIO CUBE",
+                                            style={
+                                                "fontSize": "12px",
+                                                "fontWeight": "900",
+                                                "letterSpacing": "0.12em",
+                                                "color": "#93c5fd",
+                                                "marginBottom": "10px",
+                                            },
+                                        ),
+                                        html.H2(
+                                            "Ask the cube anything about this portfolio",
+                                            style={
+                                                "margin": "0 0 10px 0",
+                                                "fontSize": "28px",
+                                                "fontWeight": "900",
+                                                "color": "white",
+                                                "lineHeight": "1.15",
+                                            },
+                                        ),
+                                        html.P(
+                                            "The cube reads the active customer portfolio, filters, risk signals, decision mix, segments, economics, and guardrails to return a business-ready answer.",
+                                            style={
+                                                "margin": "0",
+                                                "fontSize": "14px",
+                                                "lineHeight": "1.55",
+                                                "color": "#cbd5e1",
+                                            },
+                                        ),
+                                        html.Div(
+                                            children=[
+                                                html.Div("Risk", style={"backgroundColor": "rgba(239, 68, 68, 0.18)", "border": "1px solid rgba(248, 113, 113, 0.35)", "borderRadius": "999px", "padding": "8px 12px", "color": "#fecaca", "fontWeight": "800", "fontSize": "12px"}),
+                                                html.Div("ROI", style={"backgroundColor": "rgba(34, 197, 94, 0.16)", "border": "1px solid rgba(74, 222, 128, 0.35)", "borderRadius": "999px", "padding": "8px 12px", "color": "#bbf7d0", "fontWeight": "800", "fontSize": "12px"}),
+                                                html.Div("Segments", style={"backgroundColor": "rgba(59, 130, 246, 0.18)", "border": "1px solid rgba(96, 165, 250, 0.38)", "borderRadius": "999px", "padding": "8px 12px", "color": "#bfdbfe", "fontWeight": "800", "fontSize": "12px"}),
+                                                html.Div("Guardrails", style={"backgroundColor": "rgba(168, 85, 247, 0.18)", "border": "1px solid rgba(192, 132, 252, 0.38)", "borderRadius": "999px", "padding": "8px 12px", "color": "#e9d5ff", "fontWeight": "800", "fontSize": "12px"}),
+                                            ],
+                                            style={
+                                                "display": "flex",
+                                                "flexWrap": "wrap",
+                                                "gap": "8px",
+                                                "marginTop": "18px",
+                                            },
+                                        ),
+                                        html.Div(
+                                            children=[
+                                                html.Div(
+                                                    className="magic-cube-holo-stage",
+                                                    children=[
+                                                        html.Div(className="magic-cube-orbit magic-cube-orbit-one", children=[html.Div(className="magic-cube-orbit-dot magic-cube-orbit-dot-one")]),
+                                                        html.Div(className="magic-cube-orbit magic-cube-orbit-two", children=[html.Div(className="magic-cube-orbit-dot magic-cube-orbit-dot-two")]),
+                                                        html.Div(className="magic-cube-orbit magic-cube-orbit-three", children=[html.Div(className="magic-cube-orbit-dot magic-cube-orbit-dot-three")]),
+                                                        html.Div("RISK", className="magic-cube-stream-token magic-cube-token-in-one"),
+                                                        html.Div("ROI", className="magic-cube-stream-token magic-cube-token-in-two"),
+                                                        html.Div("SEGMENT", className="magic-cube-stream-token magic-cube-token-in-three"),
+                                                        html.Div("SCALE", className="magic-cube-stream-token magic-cube-token-out-one"),
+                                                        html.Div("BLOCK", className="magic-cube-stream-token magic-cube-token-out-two"),
+                                                        html.Div(className="magic-cube-energy-line magic-cube-energy-left"),
+                                                        html.Div(className="magic-cube-energy-line magic-cube-energy-right"),
+                                                        html.Div("DATA SIGNALS", className="magic-cube-holo-label magic-cube-label-input"),
+                                                        html.Div("DECISION OUTPUT", className="magic-cube-holo-label magic-cube-label-output"),
+                                                        html.Div(
+                                                            className="magic-cube-3d-scene",
+                                                            children=[
+                                                                html.Div(
+                                                                    className="magic-cube-3d-core-v2",
+                                                                    children=[
+                                                                        html.Div("RISK", className="magic-cube-face magic-cube-face-front"),
+                                                                        html.Div("ROI", className="magic-cube-face magic-cube-face-back"),
+                                                                        html.Div("TEST", className="magic-cube-face magic-cube-face-right"),
+                                                                        html.Div("SCALE", className="magic-cube-face magic-cube-face-left"),
+                                                                        html.Div("RULES", className="magic-cube-face magic-cube-face-top"),
+                                                                        html.Div("DATA", className="magic-cube-face magic-cube-face-bottom"),
+                                                                    ],
+                                                                ),
+                                                            ],
+                                                        ),
+                                                    ],
+                                                )
+                                            ]
+                                        ),
+                                    html.Div(
+                                        id="magic-cube-live-state",
+                                        children=[
+                                            html.Div(
+                                                "LIVE CUBE STATE",
+                                                style={
+                                                    "fontSize": "11px",
+                                                    "fontWeight": "900",
+                                                    "letterSpacing": "0.12em",
+                                                    "color": "#93c5fd",
+                                                    "marginBottom": "8px",
+                                                },
+                                            ),
+                                            html.Div(
+                                                "Mode: Ready",
+                                                style={"fontSize": "14px", "fontWeight": "900", "color": "white", "marginBottom": "6px"},
+                                            ),
+                                            html.Div(
+                                                "Ask a question to activate the cube state panel.",
+                                                style={"fontSize": "12px", "lineHeight": "1.45", "color": "#cbd5e1"},
+                                            ),
+                                        ],
+                                        style={
+                                            "marginTop": "14px",
+                                            "background": "rgba(15, 23, 42, 0.56)",
+                                            "border": "1px solid rgba(147, 197, 253, 0.28)",
+                                            "borderRadius": "16px",
+                                            "padding": "14px",
+                                            "boxShadow": "inset 0 0 24px rgba(59, 130, 246, 0.10)",
+                                        },
+                                    ),
+                                    ],
+                                    style={
+                                        "background": "linear-gradient(145deg, #0f172a, #172554)",
+                                        "borderRadius": "24px",
+                                        "padding": "24px",
+                                        "boxShadow": "0 18px 42px rgba(15, 23, 42, 0.22)",
+                                    },
+                                ),
+                                html.Div(
+                                    className="magic-cube-terminal",
+                                    children=[
+                                        html.H3(
+                                            "Ask the Decision Cube",
+                                            style={"margin": "0 0 8px 0", "fontSize": "22px", "fontWeight": "900", "color": COLORS["text"]},
+                                        ),
+                                        html.P(
+                                            "Type a question or choose a prompt. The answer will use the active portfolio view and current filters.",
+                                            style={"margin": "0 0 14px 0", "color": COLORS["muted"], "lineHeight": "1.45"},
+                                        ),
+                                        dcc.Textarea(
+                                            id="magic-cube-question",
+                                            value="What should I do next with this portfolio?",
+                                            placeholder="Ask something like: Why are customers blocked? Which segment should I prioritize? Is this portfolio launch-ready?",
+                                            style={
+                                                "width": "100%",
+                                                "minHeight": "92px",
+                                                "border": f"1px solid {COLORS['border']}",
+                                                "borderRadius": "14px",
+                                                "padding": "12px",
+                                                "fontSize": "14px",
+                                                "fontFamily": "Arial",
+                                                "resize": "vertical",
+                                                "boxSizing": "border-box",
+                                            },
+                                        ),
+                                        html.Div(
+                                            children=[
+                                                html.Button("What should I do next?", id="magic-prompt-next", n_clicks=0, style={"border": "none", "borderRadius": "999px", "padding": "9px 12px", "fontWeight": "800", "backgroundColor": "#eff6ff", "color": "#1d4ed8", "cursor": "pointer"}),
+                                                html.Button("Why are customers blocked?", id="magic-prompt-blocked", n_clicks=0, style={"border": "none", "borderRadius": "999px", "padding": "9px 12px", "fontWeight": "800", "backgroundColor": "#fef2f2", "color": "#b91c1c", "cursor": "pointer"}),
+                                                html.Button("Which segment is best?", id="magic-prompt-segment", n_clicks=0, style={"border": "none", "borderRadius": "999px", "padding": "9px 12px", "fontWeight": "800", "backgroundColor": "#f0fdf4", "color": "#15803d", "cursor": "pointer"}),
+                                                html.Button("Is this launch-ready?", id="magic-prompt-launch", n_clicks=0, style={"border": "none", "borderRadius": "999px", "padding": "9px 12px", "fontWeight": "800", "backgroundColor": "#faf5ff", "color": "#7e22ce", "cursor": "pointer"}),
+                                            ],
+                                            style={"display": "flex", "flexWrap": "wrap", "gap": "8px", "marginTop": "12px"},
+                                        ),
+                                        html.Button(
+                                            "Run Cube Analysis",
+                                            id="magic-cube-run-button",
+                                            n_clicks=0,
+                                            style={
+                                                "border": "none",
+                                                "borderRadius": "14px",
+                                                "padding": "12px 16px",
+                                                "fontWeight": "900",
+                                                "color": "white",
+                                                "background": "linear-gradient(135deg, #2563eb, #7c3aed)",
+                                                "cursor": "pointer",
+                                                "width": "100%",
+                                                "marginTop": "14px",
+                                                "boxShadow": "0 10px 22px rgba(37, 99, 235, 0.25)",
+                                            },
+                                        ),
+                                        html.Div(
+                                            id="magic-cube-answer",
+                                            className="magic-cube-output-terminal",
+                                            children=[
+                                                html.Div(
+                                                    "Cube ready",
+                                                    style={"fontSize": "12px", "fontWeight": "900", "letterSpacing": "0.10em", "color": "#2563eb", "textTransform": "uppercase", "marginBottom": "8px"},
+                                                ),
+                                                html.Div(
+                                                    "Ask a question to generate a data-driven portfolio answer.",
+                                                    style={"fontSize": "14px", "color": COLORS["muted"], "lineHeight": "1.5"},
+                                                ),
+                                            ],
+                                            style={
+                                                "backgroundColor": "#f8fafc",
+                                                "border": f"1px solid {COLORS['border']}",
+                                                "borderRadius": "16px",
+                                                "padding": "16px",
+                                                "marginTop": "16px",
+                                            },
+                                        ),
+                                    ],
+                                    style={
+                                        "background": "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.92))",
+                                        "border": "1px solid rgba(191, 219, 254, 0.95)",
+                                        "borderRadius": "24px",
+                                        "padding": "24px",
+                                        "boxShadow": "0 14px 32px rgba(15, 23, 42, 0.08)",
+                                    },
+                                ),
+                            ],
+                            className="magic-cube-unified-console",
+                            style={
+                                "display": "grid",
+                                "gridTemplateColumns": "1.02fr 1fr",
+                                "gap": "22px",
+                                "marginTop": "22px",
+                                "marginBottom": "22px",
+                                "padding": "18px",
+                                "borderRadius": "32px",
+                                "background": "linear-gradient(135deg, #020617, #0f172a 42%, #172554 100%)",
+                                "border": "1px solid rgba(147,197,253,0.55)",
+                                "boxShadow": "0 22px 60px rgba(15, 23, 42, 0.28)",
+                                "alignItems": "stretch",
+                            },
+                        ),
+                        html.Div(
+                            children=[
                                 create_chart_card("Decision Mix", "Share of customers assigned to Scale, Test, Do Not Launch, or Block.", decision_fig, "overview-decision-share"),
                                 create_chart_card("Decision Counts", "Volume behind each portfolio decision.", decision_bar_fig, "overview-decision-counts"),
                             ],
@@ -5437,6 +5662,756 @@ def download_schema_excel(n_clicks):
 
 
 
+
+
+MAGIC_CUBE_INTENTS = {
+    "explain_cube": {
+        "label": "Explain the cube",
+        "keywords": [
+            "what is this", "what does this do", "explain this", "how does this work",
+            "what is cube", "what is the cube", "what am i looking at", "help me understand",
+        ],
+        "topics": ["cube", "decision cube", "magic cube", "portfolio assistant", "overview assistant", "engine assistant"],
+    },
+    "calculation_logic": {
+        "label": "Calculation logic",
+        "keywords": [
+            "calculate", "calculation", "formula", "logic", "how do you calculate",
+            "how is this calculated", "how are decisions made", "how does engine decide",
+            "methodology", "model logic", "scoring logic", "derive", "computed",
+        ],
+        "topics": ["calculation", "engine logic", "decision logic", "scoring", "formula", "methodology", "risk-adjusted profit", "expected roi", "default probability"],
+    },
+    "risk_guardrail": {
+        "label": "Risk and guardrails",
+        "keywords": [
+            "block", "blocked", "guardrail", "risk", "protect", "risky", "hard stop",
+            "default", "late payment", "utilization", "credit risk", "high risk",
+        ],
+        "topics": ["blocked customers", "guardrails", "risk", "default probability", "late payments", "high utilization", "hard stop rules"],
+    },
+    "segment_priority": {
+        "label": "Segment priority",
+        "keywords": [
+            "segment", "prioritize", "priority", "best segment", "top segment",
+            "customer group", "which group", "who should i target",
+        ],
+        "topics": ["segments", "customer segments", "priority segment", "top segment", "target group", "customer group"],
+    },
+    "launch_readiness": {
+        "label": "Launch readiness",
+        "keywords": [
+            "launch", "ready", "readiness", "safe", "can we launch", "should we launch",
+            "go live", "rollout", "scale now", "approval",
+        ],
+        "topics": ["launch readiness", "campaign launch", "rollout", "scale decision", "launch approval", "go-live readiness"],
+    },
+    "campaign_strategy": {
+        "label": "Campaign strategy",
+        "keywords": [
+            "campaign", "offer", "cashback", "apr", "promotion", "balance transfer",
+            "which campaign", "offer strategy", "marketing campaign",
+        ],
+        "topics": ["campaign", "offer", "cashback", "APR offer", "promotion", "balance transfer", "marketing campaign"],
+    },
+    "economics": {
+        "label": "Economics and ROI",
+        "keywords": [
+            "profit", "roi", "economics", "value", "revenue", "monthly spend",
+            "risk-adjusted profit", "return", "worth it", "profitable",
+        ],
+        "topics": ["profit", "ROI", "economics", "revenue", "monthly spend", "risk-adjusted profit", "value"],
+    },
+    "customer_decision": {
+        "label": "Customer decision trace",
+        "keywords": [
+            "customer", "individual", "why did customer", "decision trace", "customer 360",
+            "specific customer", "explain customer", "one customer",
+        ],
+        "topics": ["customer decision", "individual customer", "Customer 360", "decision trace", "specific customer"],
+    },
+    "data_upload_schema": {
+        "label": "Data and upload",
+        "keywords": [
+            "upload", "csv", "excel", "schema", "data file", "columns", "fields",
+            "what data", "dataset", "active data", "source data",
+        ],
+        "topics": ["uploaded file", "CSV", "Excel", "schema", "data columns", "active dataset", "source data"],
+    },
+    "next_action": {
+        "label": "Recommended next action",
+        "keywords": [
+            "next", "what should i do", "recommend", "recommendation", "action",
+            "next step", "where should i go", "what now", "guide me",
+        ],
+        "topics": ["next step", "recommendation", "action", "workflow", "where to go", "business move"],
+    },
+}
+
+
+def normalize_magic_text(value):
+    value = (value or "").lower()
+    value = re.sub(r"[^a-z0-9\s]", " ", value)
+    return " ".join(value.split())
+
+
+def build_magic_cube_question_bank():
+    starters = [
+        "what is", "explain", "how do i understand", "tell me about", "show me",
+        "how should i think about", "what does the dashboard say about",
+        "what does the cube say about", "analyze", "summarize", "why does",
+        "how do we use", "what should i do with", "where should i start with",
+        "give me a readout on", "what is the story behind", "what is driving",
+        "how important is", "what is happening with", "what are the risks in",
+    ]
+
+    endings = [
+        "", "in this portfolio", "for the active view", "after filters",
+        "for this customer base", "before launch", "before campaign rollout",
+        "from a business perspective", "from a risk perspective",
+        "from a Capital One analyst perspective",
+    ]
+
+    bank = []
+
+    for intent, config in MAGIC_CUBE_INTENTS.items():
+        topics = config.get("topics", [])
+        for starter in starters:
+            for topic in topics:
+                for ending in endings:
+                    question = f"{starter} {topic} {ending}".strip()
+                    bank.append(
+                        {
+                            "question": normalize_magic_text(question),
+                            "intent": intent,
+                            "label": config["label"],
+                        }
+                    )
+
+    return bank
+
+
+MAGIC_CUBE_QUESTION_BANK = build_magic_cube_question_bank()
+
+
+def match_magic_cube_intent(question):
+    normalized = normalize_magic_text(question)
+    question_tokens = set(normalized.split())
+
+    if not normalized:
+        return "next_action", "Recommended next action", "empty question"
+
+    best_intent = "next_action"
+    best_label = MAGIC_CUBE_INTENTS["next_action"]["label"]
+    best_score = 0
+    best_question = ""
+
+    for intent, config in MAGIC_CUBE_INTENTS.items():
+        score = 0
+        for keyword in config.get("keywords", []):
+            keyword_normalized = normalize_magic_text(keyword)
+            keyword_tokens = set(keyword_normalized.split())
+
+            if keyword_normalized and keyword_normalized in normalized:
+                score += 10 + len(keyword_tokens)
+
+            score += len(question_tokens.intersection(keyword_tokens))
+
+        if score > best_score:
+            best_score = score
+            best_intent = intent
+            best_label = config["label"]
+            best_question = config.get("keywords", [""])[0]
+
+    # Lightweight nearest-question match across the generated 1000+ phrasing bank.
+    for item in MAGIC_CUBE_QUESTION_BANK:
+        bank_tokens = set(item["question"].split())
+
+        if not bank_tokens:
+            continue
+
+        overlap = len(question_tokens.intersection(bank_tokens))
+        score = overlap / max(1, len(question_tokens.union(bank_tokens)))
+
+        if score > 0.38 and score * 10 > best_score:
+            best_score = score * 10
+            best_intent = item["intent"]
+            best_label = item["label"]
+            best_question = item["question"]
+
+    return best_intent, best_label, best_question
+
+
+@app.callback(
+    Output("magic-cube-question", "value"),
+    Input("magic-prompt-next", "n_clicks"),
+    Input("magic-prompt-blocked", "n_clicks"),
+    Input("magic-prompt-segment", "n_clicks"),
+    Input("magic-prompt-launch", "n_clicks"),
+    prevent_initial_call=True,
+)
+def update_magic_cube_question(next_clicks, blocked_clicks, segment_clicks, launch_clicks):
+    trigger = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else ""
+
+    prompt_map = {
+        "magic-prompt-next": "What should I do next with this portfolio?",
+        "magic-prompt-blocked": "Why are customers blocked and what should I do with them?",
+        "magic-prompt-segment": "Which segment should I prioritize and why?",
+        "magic-prompt-launch": "Is this portfolio launch-ready?",
+    }
+
+    return prompt_map.get(trigger, "What should I do next with this portfolio?")
+
+
+@app.callback(
+    Output("magic-cube-answer", "children"),
+    Input("magic-cube-run-button", "n_clicks"),
+    State("magic-cube-question", "value"),
+    State("filter-segment", "value"),
+    State("filter-decision", "value"),
+    State("filter-risk", "value"),
+    State("filter-action", "value"),
+    State("active-customer-data-store", "data"),
+    prevent_initial_call=True,
+)
+def run_magic_cube_analysis(
+    n_clicks,
+    question,
+    selected_segments,
+    selected_decisions,
+    selected_risks,
+    selected_actions,
+    active_data,
+):
+    if not n_clicks:
+        raise PreventUpdate
+
+    master_df = get_active_customer_features(active_data)
+
+    filtered = apply_global_filters(
+        selected_segments,
+        selected_decisions,
+        selected_risks,
+        selected_actions,
+        master_df,
+    )
+
+    if filtered.empty:
+        return create_zero_state_card(
+            "Cube could not find matching customers",
+            "No customers match the active filters. Clear filters or upload a broader customer file, then run the cube again.",
+            "The cube uses the active portfolio view, so filtered-out customers are intentionally excluded.",
+        )
+
+    q = (question or "").lower().strip()
+    matched_intent, matched_label, matched_question = match_magic_cube_intent(question)
+    total = int(len(filtered))
+
+    def safe_count(column, value):
+        if column not in filtered.columns:
+            return 0
+        return int(filtered[column].fillna("").astype(str).eq(value).sum())
+
+    def safe_numeric(column):
+        if column not in filtered.columns:
+            return pd.Series([0] * total)
+        return pd.to_numeric(filtered[column], errors="coerce").fillna(0)
+
+    scale_count = safe_count("decision_status", "Scale")
+    test_count = safe_count("decision_status", "Test")
+    block_count = safe_count("decision_status", "Block")
+    hold_count = safe_count("decision_status", "Do Not Launch")
+    eligible_count = scale_count + test_count
+
+    eligible_rate = eligible_count / total if total else 0
+    block_rate = block_count / total if total else 0
+
+    monthly_spend = float(safe_numeric("monthly_spend").sum())
+    risk_adjusted_profit = float(safe_numeric("risk_adjusted_profit").sum())
+    avg_default_probability = float(safe_numeric("default_probability").mean())
+    avg_roi = float(safe_numeric("expected_roi").mean())
+    high_util_count = int((safe_numeric("utilization_rate") >= 0.70).sum())
+
+    if "customer_segment" in filtered.columns:
+        segment_counts = filtered["customer_segment"].fillna("Unknown").astype(str).value_counts()
+        top_segment = str(segment_counts.index[0]) if not segment_counts.empty else "Unknown segment"
+        top_segment_count = int(segment_counts.iloc[0]) if not segment_counts.empty else 0
+
+        segment_summary = (
+            filtered.assign(
+                _profit=safe_numeric("risk_adjusted_profit"),
+                _default=safe_numeric("default_probability"),
+            )
+            .groupby("customer_segment", as_index=False)
+            .agg(
+                customers=("customer_id", "count"),
+                profit=("_profit", "sum"),
+                avg_default=("_default", "mean"),
+            )
+            if "customer_id" in filtered.columns
+            else pd.DataFrame()
+        )
+
+        if not segment_summary.empty:
+            best_profit_row = segment_summary.sort_values("profit", ascending=False).iloc[0]
+            riskiest_row = segment_summary.sort_values("avg_default", ascending=False).iloc[0]
+            best_segment = str(best_profit_row["customer_segment"])
+            best_segment_profit = float(best_profit_row["profit"])
+            riskiest_segment = str(riskiest_row["customer_segment"])
+            riskiest_default = float(riskiest_row["avg_default"])
+        else:
+            best_segment = top_segment
+            best_segment_profit = risk_adjusted_profit
+            riskiest_segment = top_segment
+            riskiest_default = avg_default_probability
+    else:
+        top_segment = "Unknown segment"
+        top_segment_count = total
+        best_segment = top_segment
+        best_segment_profit = risk_adjusted_profit
+        riskiest_segment = top_segment
+        riskiest_default = avg_default_probability
+
+    if matched_intent == "explain_cube":
+        title = "Cube readout: what this is"
+        answer = (
+            "This is the Magic Portfolio Cube: a data-driven command center for the active customer portfolio. "
+            "It reads the same filtered customer view used by the dashboard, summarizes risk, profitability, segment mix, decision status, and guardrail signals, "
+            "then turns that into a business answer. It is not a free-form chatbot yet; it is a local rule-based analyst layer built on top of the portfolio engine."
+        )
+        recommendation = (
+            "Recommended move: ask a business question such as why customers are blocked, which segment to prioritize, whether the portfolio is launch-ready, "
+            "or which campaign path to explore next."
+        )
+        ctas = [
+            ("Open Playbook", "cta-guardrails-playbook", "#7c3aed"),
+            ("Review Guardrails", "cta-open-guardrails", "#dc2626"),
+        ]
+        accent = "#2563eb"
+
+    elif matched_intent == "calculation_logic":
+        title = "Cube readout: calculation logic"
+        answer = (
+            "The engine calculates the portfolio in layers. First it reads customer-level fields such as spend, balance, credit score, income, utilization, late payments, tenure, and engagement. "
+            "Then it derives risk and economics signals including default probability, risk band, expected ROI, and risk-adjusted profit. "
+            "Finally it applies decision rules and guardrails to classify customers into Scale, Test, Do Not Launch, or Block."
+        )
+        recommendation = (
+            f"For this active view, the engine is currently evaluating {total:,} customers, with {eligible_count:,} in Scale/Test and {block_count:,} blocked. "
+            "Use Customer 360 for one-customer explanation, Strategy Playbook for segment logic, and Guardrails for rule-level review."
+        )
+        ctas = [
+            ("Open Customer 360", "action-open-customer-tools", "#2563eb"),
+            ("Review Guardrails", "cta-open-guardrails", "#dc2626"),
+        ]
+        accent = "#0ea5e9"
+
+    elif matched_intent == "risk_guardrail":
+        title = "Cube readout: guardrail and blocked-customer risk"
+        answer = (
+            f"The cube found {block_count:,} blocked customers, equal to {format_percent(block_rate)} of the active view. "
+            f"It also found {high_util_count:,} customers at or above 70% utilization. "
+            f"The riskiest segment is {riskiest_segment}, with average default probability of {format_percent(riskiest_default)}. "
+            "These customers should not receive aggressive growth offers until the risk conditions are reviewed."
+        )
+        recommendation = "Recommended move: open Guardrails, review the risk audience, then export only safe Scale/Test groups."
+        ctas = [
+            ("Review Guardrails", "cta-open-guardrails", "#dc2626"),
+            ("Explore Audience", "cta-open-audience", "#16a34a"),
+        ]
+        accent = "#dc2626"
+
+    elif matched_intent == "segment_priority":
+        title = "Cube readout: segment priority"
+        answer = (
+            f"The largest active segment is {top_segment} with {top_segment_count:,} customers. "
+            f"The strongest profit pool is {best_segment}, contributing {format_currency(best_segment_profit)} in risk-adjusted profit. "
+            f"The active view has {eligible_count:,} Scale/Test customers, so segment prioritization should start where profit and eligibility overlap."
+        )
+        recommendation = "Recommended move: use Segment Strategy and Strategy Playbook before selecting campaigns."
+        ctas = [
+            ("Open Segment Strategy", "action-open-customer-tools", "#2563eb"),
+            ("Open Playbook", "cta-guardrails-playbook", "#7c3aed"),
+        ]
+        accent = "#2563eb"
+
+    elif matched_intent == "launch_readiness":
+        title = "Cube readout: launch readiness"
+        if block_rate >= 0.05:
+            readiness = "not ready for broad launch"
+            reason = "the blocked population is material and should be reviewed first."
+            accent = "#dc2626"
+        elif eligible_rate >= 0.50:
+            readiness = "directionally launch-ready for controlled execution"
+            reason = "more than half of the active view is eligible for Scale/Test."
+            accent = "#16a34a"
+        else:
+            readiness = "better suited for controlled testing than broad launch"
+            reason = "the eligible pool is not large enough to justify broad rollout without more validation."
+            accent = "#f97316"
+
+        title = "Cube readout: launch readiness"
+        answer = (
+            f"The cube classifies this active view as {readiness}. "
+            f"{format_percent(eligible_rate)} of customers are Scale/Test, while {format_percent(block_rate)} are blocked. "
+            f"Average default probability is {format_percent(avg_default_probability)}. The reason: {reason}"
+        )
+        recommendation = "Recommended move: simulate the campaign, design an A/B test, and run Guardrails before export."
+        ctas = [
+            ("Simulate Impact", "cta-open-scenario", "#f97316"),
+            ("Final Risk Review", "cta-open-guardrails", "#dc2626"),
+        ]
+
+    elif matched_intent == "campaign_strategy":
+        title = "Cube readout: campaign direction"
+        answer = (
+            f"The active view has {eligible_count:,} customers eligible for Scale/Test and {block_count:,} blocked customers. "
+            f"With {format_currency(monthly_spend)} in monthly spend and {format_currency(risk_adjusted_profit)} in risk-adjusted profit, "
+            "campaign selection should focus on segments with both customer volume and positive risk-adjusted economics."
+        )
+        recommendation = "Recommended move: open Campaigns & Offers, choose the top ranked campaign, then validate in Scenario Simulator."
+        ctas = [
+            ("Choose Campaign", "cta-playbook-campaigns", "#2563eb"),
+            ("Simulate Impact", "cta-open-scenario", "#f97316"),
+        ]
+        accent = "#2563eb"
+
+    elif matched_intent == "economics":
+        title = "Cube readout: economics and ROI"
+        answer = (
+            f"The active view contains {format_currency(risk_adjusted_profit)} in risk-adjusted profit, "
+            f"{format_currency(monthly_spend)} in monthly spend, and average expected ROI of {avg_roi:.2f}x. "
+            f"The Scale/Test pool is {eligible_count:,} customers, representing {format_percent(eligible_rate)} of the active view."
+        )
+        recommendation = "Recommended move: prioritize campaigns where ROI, profit, and guardrail pass rates all align."
+        ctas = [
+            ("Open Playbook", "cta-guardrails-playbook", "#7c3aed"),
+            ("Choose Campaign", "cta-playbook-campaigns", "#2563eb"),
+        ]
+        accent = "#16a34a"
+
+    elif matched_intent == "customer_decision":
+        title = "Cube readout: customer-level decision trace"
+        answer = (
+            "For individual explanations, the cube routes users to Customer 360. That view shows the selected customer profile, decision status, risk band, utilization, late payments, default probability, ROI, risk-adjusted profit, and recommended action."
+        )
+        recommendation = "Recommended move: open Customer 360, select a customer, and review the decision trace before using that customer in any campaign audience."
+        ctas = [
+            ("Open Customer 360", "action-open-customer-tools", "#2563eb"),
+            ("Explore Audience", "cta-open-audience", "#16a34a"),
+        ]
+        accent = "#2563eb"
+
+    elif matched_intent == "data_upload_schema":
+        title = "Cube readout: data and upload logic"
+        answer = (
+            "The cube uses the active master dataset. In demo mode, it reads the synthetic portfolio. When a CSV or Excel file is uploaded and validated, that uploaded customer file becomes the active portfolio used by the overview, strategy, campaign, customer lookup, audience export, and guardrail pages."
+        )
+        recommendation = "Recommended move: use the Data Source & Schema Center to download the template, upload a customer file, then rerun the cube on the uploaded portfolio."
+        ctas = [
+            ("Open Overview", "guide-open-overview", "#2563eb"),
+            ("Review Guardrails", "cta-open-guardrails", "#dc2626"),
+        ]
+        accent = "#0ea5e9"
+
+    else:
+        title = "Cube readout: recommended next move"
+        answer = (
+            f"The cube analyzed {total:,} customers in the active view. "
+            f"{scale_count:,} are Scale, {test_count:,} are Test, {hold_count:,} are Do Not Launch, and {block_count:,} are Block. "
+            f"{format_percent(eligible_rate)} are eligible for Scale/Test. The top segment by size is {top_segment}."
+        )
+        recommendation = "Recommended move: start with Strategy Playbook, then choose a campaign, simulate impact, and review guardrails before export."
+        ctas = [
+            ("Open Playbook", "cta-guardrails-playbook", "#7c3aed"),
+            ("Choose Campaign", "cta-playbook-campaigns", "#2563eb"),
+        ]
+        accent = "#7c3aed"
+
+    return html.Div(
+        children=[
+            html.Div(
+                "Cube analysis complete",
+                style={
+                    "fontSize": "12px",
+                    "fontWeight": "900",
+                    "letterSpacing": "0.10em",
+                    "color": accent,
+                    "textTransform": "uppercase",
+                    "marginBottom": "8px",
+                },
+            ),
+            html.H4(
+                title,
+                style={
+                    "margin": "0 0 8px 0",
+                    "fontSize": "18px",
+                    "fontWeight": "900",
+                    "color": COLORS["text"],
+                },
+            ),
+            html.Div(
+                f"Matched intent: {matched_label}",
+                style={
+                    "fontSize": "12px",
+                    "fontWeight": "800",
+                    "color": COLORS["muted"],
+                    "marginBottom": "8px",
+                },
+            ),
+            html.P(
+                answer,
+                style={
+                    "margin": "0 0 10px 0",
+                    "fontSize": "14px",
+                    "lineHeight": "1.55",
+                    "color": COLORS["text"],
+                },
+            ),
+            html.Div(
+                recommendation,
+                style={
+                    "backgroundColor": "#f8fafc",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "12px",
+                    "padding": "10px",
+                    "fontSize": "13px",
+                    "lineHeight": "1.45",
+                    "color": COLORS["muted"],
+                    "marginBottom": "12px",
+                },
+            ),
+            html.Div(
+                children=[
+                    create_metric_chip("Active customers", f"{total:,}"),
+                    create_metric_chip("Scale/Test", f"{eligible_count:,}"),
+                    create_metric_chip("Blocked", f"{block_count:,}"),
+                    create_metric_chip("Risk-adjusted profit", format_currency(risk_adjusted_profit)),
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "repeat(4, minmax(0, 1fr))",
+                    "gap": "8px",
+                    "marginBottom": "12px",
+                },
+            ),
+            html.Div(
+                children=[
+                    html.Button(
+                        label,
+                        id={"type": "magic-cube-cta", "target": target_id},
+                        n_clicks=0,
+                        style={
+                            "border": "none",
+                            "borderRadius": "12px",
+                            "padding": "10px 12px",
+                            "fontWeight": "900",
+                            "color": "white",
+                            "backgroundColor": color,
+                            "cursor": "pointer",
+                        },
+                    )
+                    for label, target_id, color in ctas
+                ],
+                style={"display": "flex", "gap": "8px", "flexWrap": "wrap"},
+            ),
+        ]
+    )
+
+
+@app.callback(
+    Output("magic-cube-live-state", "children"),
+    Input("magic-cube-run-button", "n_clicks"),
+    State("magic-cube-question", "value"),
+    State("filter-segment", "value"),
+    State("filter-decision", "value"),
+    State("filter-risk", "value"),
+    State("filter-action", "value"),
+    State("active-customer-data-store", "data"),
+    prevent_initial_call=True,
+)
+def update_magic_cube_live_state(
+    n_clicks,
+    question,
+    selected_segments,
+    selected_decisions,
+    selected_risks,
+    selected_actions,
+    active_data,
+):
+    if not n_clicks:
+        raise PreventUpdate
+
+    master_df = get_active_customer_features(active_data)
+
+    filtered = apply_global_filters(
+        selected_segments,
+        selected_decisions,
+        selected_risks,
+        selected_actions,
+        master_df,
+    )
+
+    if filtered.empty:
+        return [
+            html.Div(
+                "LIVE CUBE STATE",
+                style={
+                    "fontSize": "11px",
+                    "fontWeight": "900",
+                    "letterSpacing": "0.12em",
+                    "color": "#fbbf24",
+                    "marginBottom": "8px",
+                },
+            ),
+            html.Div(
+                "Mode: No matching data",
+                style={"fontSize": "14px", "fontWeight": "900", "color": "white", "marginBottom": "6px"},
+            ),
+            html.Div(
+                "The cube cannot analyze because the active filters return zero customers.",
+                style={"fontSize": "12px", "lineHeight": "1.45", "color": "#cbd5e1"},
+            ),
+        ]
+
+    matched_intent, matched_label, matched_question = match_magic_cube_intent(question)
+
+    total = int(len(filtered))
+
+    def state_count(column, value):
+        if column not in filtered.columns:
+            return 0
+        return int(filtered[column].fillna("").astype(str).eq(value).sum())
+
+    def state_numeric(column):
+        if column not in filtered.columns:
+            return pd.Series([0] * total)
+        return pd.to_numeric(filtered[column], errors="coerce").fillna(0)
+
+    scale_count = state_count("decision_status", "Scale")
+    test_count = state_count("decision_status", "Test")
+    block_count = state_count("decision_status", "Block")
+    eligible_count = scale_count + test_count
+
+    high_util_count = int((state_numeric("utilization_rate") >= 0.70).sum())
+    avg_default_probability = float(state_numeric("default_probability").mean())
+    risk_adjusted_profit = float(state_numeric("risk_adjusted_profit").sum())
+
+    mode_map = {
+        "explain_cube": {
+            "mode": "Cube explainer",
+            "focus": "What the cube reads and how to use it",
+            "output": "Ask a business question",
+            "accent": "#60a5fa",
+        },
+        "calculation_logic": {
+            "mode": "Engine logic",
+            "focus": "Spend, balance, score, utilization, risk, ROI, profit",
+            "output": "Customer 360 + Guardrails",
+            "accent": "#0ea5e9",
+        },
+        "risk_guardrail": {
+            "mode": "Guardrail analysis",
+            "focus": f"{block_count:,} blocked customers · {high_util_count:,} high-utilization watchlist",
+            "output": "Review Guardrails",
+            "accent": "#dc2626",
+        },
+        "segment_priority": {
+            "mode": "Segment prioritization",
+            "focus": "Find where customer volume, eligibility, and profit overlap",
+            "output": "Open Strategy Playbook",
+            "accent": "#2563eb",
+        },
+        "launch_readiness": {
+            "mode": "Launch readiness",
+            "focus": f"{eligible_count:,} Scale/Test customers · {block_count:,} blocked",
+            "output": "Simulate + final risk review",
+            "accent": "#7c3aed",
+        },
+        "campaign_strategy": {
+            "mode": "Campaign direction",
+            "focus": "Match eligible segments to campaign opportunities",
+            "output": "Choose Campaign",
+            "accent": "#2563eb",
+        },
+        "economics": {
+            "mode": "Economics readout",
+            "focus": f"{format_currency(risk_adjusted_profit)} risk-adjusted profit",
+            "output": "Prioritize positive ROI paths",
+            "accent": "#16a34a",
+        },
+        "customer_decision": {
+            "mode": "Customer decision trace",
+            "focus": "Explain one customer’s decision and next-best-action",
+            "output": "Open Customer 360",
+            "accent": "#2563eb",
+        },
+        "data_upload_schema": {
+            "mode": "Data source logic",
+            "focus": "Synthetic demo or uploaded customer file",
+            "output": "Review schema + upload path",
+            "accent": "#0ea5e9",
+        },
+        "next_action": {
+            "mode": "Recommended next move",
+            "focus": f"{total:,} customers · {eligible_count:,} Scale/Test · {block_count:,} Block",
+            "output": "Playbook → Campaign → Simulation → Guardrails",
+            "accent": "#7c3aed",
+        },
+    }
+
+    state = mode_map.get(matched_intent, mode_map["next_action"])
+    accent = state["accent"]
+
+    return [
+        html.Div(
+            "LIVE CUBE STATE",
+            style={
+                "fontSize": "11px",
+                "fontWeight": "900",
+                "letterSpacing": "0.12em",
+                "color": accent,
+                "marginBottom": "8px",
+            },
+        ),
+        html.Div(
+            f"Mode: {state['mode']}",
+            style={"fontSize": "15px", "fontWeight": "900", "color": "white", "marginBottom": "8px"},
+        ),
+        html.Div(
+            children=[
+                html.Div(
+                    [
+                        html.Div("ACTIVE VIEW", style={"fontSize": "9px", "fontWeight": "900", "letterSpacing": "0.10em", "color": "#93c5fd"}),
+                        html.Div(f"{total:,} customers", style={"fontSize": "13px", "fontWeight": "900", "color": "white"}),
+                    ],
+                    style={"background": "rgba(255,255,255,0.06)", "border": "1px solid rgba(147,197,253,0.18)", "borderRadius": "12px", "padding": "9px"},
+                ),
+                html.Div(
+                    [
+                        html.Div("DEFAULT RISK", style={"fontSize": "9px", "fontWeight": "900", "letterSpacing": "0.10em", "color": "#93c5fd"}),
+                        html.Div(format_percent(avg_default_probability), style={"fontSize": "13px", "fontWeight": "900", "color": "white"}),
+                    ],
+                    style={"background": "rgba(255,255,255,0.06)", "border": "1px solid rgba(147,197,253,0.18)", "borderRadius": "12px", "padding": "9px"},
+                ),
+            ],
+            style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "8px", "marginBottom": "10px"},
+        ),
+        html.Div(
+            [
+                html.Strong("Signal focus: ", style={"color": "#bfdbfe"}),
+                state["focus"],
+            ],
+            style={"fontSize": "12px", "lineHeight": "1.45", "color": "#cbd5e1", "marginBottom": "6px"},
+        ),
+        html.Div(
+            [
+                html.Strong("Output path: ", style={"color": "#bfdbfe"}),
+                state["output"],
+            ],
+            style={"fontSize": "12px", "lineHeight": "1.45", "color": "#cbd5e1"},
+        ),
+    ]
 
 
 @app.callback(
@@ -6832,6 +7807,7 @@ def download_ab_customer_list_excel(n_clicks, campaign_id, segment, audience_typ
     Input("cta-guardrails-audience", "n_clicks"),
     Input("cta-guardrails-playbook", "n_clicks"),
     Input("cta-guardrails-ab", "n_clicks"),
+    Input({"type": "magic-cube-cta", "target": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
 def navigate_from_dashboard_guides(
@@ -6855,13 +7831,32 @@ def navigate_from_dashboard_guides(
     cta_guardrails_audience,
     cta_guardrails_playbook,
     cta_guardrails_ab,
+    magic_cube_ctas,
 ):
     ctx = callback_context
 
-    if not ctx.triggered:
+    if not callback_context.triggered:
         raise PreventUpdate
 
-    trigger = ctx.triggered[0]["prop_id"].split(".")[0]
+    trigger = callback_context.triggered[0]["prop_id"].split(".")[0]
+    route_trigger = trigger
+
+    if trigger.startswith("{"):
+        try:
+            trigger_payload = json.loads(trigger)
+        except json.JSONDecodeError:
+            trigger_payload = {}
+
+        if trigger_payload.get("type") == "magic-cube-cta":
+            cta_click_values = magic_cube_ctas if isinstance(magic_cube_ctas, list) else [magic_cube_ctas]
+            actual_clicks = [int(value or 0) for value in cta_click_values]
+
+            # Dash can fire this callback when the Magic Cube answer creates new CTA buttons.
+            # Do not navigate unless a user has actually clicked one of those buttons.
+            if not any(value > 0 for value in actual_clicks):
+                raise PreventUpdate
+
+            route_trigger = trigger_payload.get("target", "")
 
     route_map = {
         "guide-open-overview": ("overview", "customer-lookup"),
@@ -6890,10 +7885,10 @@ def navigate_from_dashboard_guides(
         "cta-guardrails-ab": ("decision-workbench", "ab-test-planner"),
     }
 
-    if trigger not in route_map:
+    if route_trigger not in route_map:
         raise PreventUpdate
 
-    return route_map[trigger]
+    return route_map[route_trigger]
 
 
 
