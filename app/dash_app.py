@@ -2323,23 +2323,23 @@ def create_playbook_action_panel() -> html.Div:
 
 def create_guardrails_action_panel() -> html.Div:
     return create_workflow_cta_panel(
-        "Guardrail follow-up actions",
-        "Use these shortcuts when a campaign needs review, export, or additional testing before rollout.",
+        "Launch review actions",
+        "Use these shortcuts to inspect risky audiences, return to strategy, or design a controlled test before broad rollout.",
         [
             {
-                "label": "View Risk Audience",
+                "label": "Review Risk Audience",
                 "id": "cta-guardrails-audience",
                 "title": "Open Audience Explorer to inspect blocked, high-risk, or constrained customer groups.",
                 "color": "#16a34a",
             },
             {
-                "label": "Back to Playbook",
+                "label": "Back to Strategy",
                 "id": "cta-guardrails-playbook",
                 "title": "Return to Strategy Playbook to review segment-level recommendations.",
                 "color": "#2563eb",
             },
             {
-                "label": "Test Campaign",
+                "label": "Design Controlled Test",
                 "id": "cta-guardrails-ab",
                 "title": "Open A/B Test Planner to design a controlled experiment before rollout.",
                 "color": "#7c3aed",
@@ -4930,7 +4930,7 @@ app.layout = html.Div(
                     children=[
                         create_tab_intro(
                             "Responsible Lending Guardrails",
-                            "This tab checks whether the engine is protecting customers who may carry higher credit risk. The goal is to separate profitable growth from risky growth and prevent aggressive offers from going to the wrong groups.",
+                            "This tab acts as the launch-readiness control layer. It checks whether high-risk, over-utilized, late-payment, or negative-profit customers are protected before any growth campaign is scaled.",
                         ),
                         create_compact_governance_panel(),
                         create_guardrails_action_panel(),
@@ -4942,8 +4942,8 @@ app.layout = html.Div(
                         html.Div(
                             id="guardrails-interpretation-container",
                             children=create_insight_card(
-                                "Guardrail Interpretation",
-                                "This section will refresh from the active master dataset and explain whether any customers fail risk rules.",
+                                "Launch Readiness Interpretation",
+                                "This section refreshes from the active master dataset and explains whether the portfolio is ready for campaign launch, requires review, or contains hard-stop customers.",
                                 variant="warning",
                             ),
                             style={"marginBottom": "18px"},
@@ -4960,13 +4960,13 @@ app.layout = html.Div(
                         ),
                         html.Div(
                             children=[
-                                create_chart_card("Risk Band Distribution", "Portfolio split by estimated risk band.", risk_fig, "guardrail-risk-chart"),
-                                create_chart_card("High Utilization Watchlist", "Decision mix for customers whose utilization rate suggests extra review.", high_utilization_fig, "guardrail-high-util-chart"),
+                                create_chart_card("Risk Band Distribution", "Portfolio split by estimated customer risk band before launch review.", risk_fig, "guardrail-risk-chart"),
+                                create_chart_card("High Utilization Watchlist", "Decision mix for customers at or above the utilization review threshold.", high_utilization_fig, "guardrail-high-util-chart"),
                             ],
                             style={"display": "grid", "gridTemplateColumns": "0.9fr 1.1fr", "gap": "18px"},
                         ),
                         html.Div(style={"height": "18px"}),
-                        create_chart_card("Blocked Customers by Segment", "Where risk guardrails are triggered.", block_segment_fig, "guardrail-blocked-segment-chart"),
+                        create_chart_card("Blocked Customers by Segment", "Segments where customers are blocked or protected by risk rules.", block_segment_fig, "guardrail-blocked-segment-chart"),
                     ],
                 ),
             ],
@@ -8655,7 +8655,11 @@ def render_guardrail_rule_cards(rule_df: pd.DataFrame):
 
     return html.Div(
         children=[
-            html.H3("Active Guardrail Rule Checklist", style={"margin": "0 0 12px 0", "fontSize": "20px", "fontWeight": "900"}),
+            html.H3("Active Rule Checklist", style={"margin": "0 0 8px 0", "fontSize": "20px", "fontWeight": "900"}),
+            html.P(
+                "Each rule is evaluated against the active master dataset. Hard-stop rules should prevent aggressive growth offers; review rules should trigger testing, manual review, or constrained rollout.",
+                style={"color": COLORS["muted"], "margin": "0 0 14px 0", "lineHeight": "1.45"},
+            ),
             html.Div(
                 cards,
                 style={"display": "grid", "gridTemplateColumns": "repeat(auto-fit, minmax(260px, 1fr))", "gap": "12px"},
@@ -8740,9 +8744,9 @@ def render_guardrail_customer_review(review_df: pd.DataFrame):
 
     return html.Div(
         children=[
-            html.H3("Customers Requiring Guardrail Review", style={"margin": "0 0 10px 0", "fontSize": "20px", "fontWeight": "900"}),
+            html.H3("Customer Review Queue", style={"margin": "0 0 10px 0", "fontSize": "20px", "fontWeight": "900"}),
             html.P(
-                "This table shows customers who are blocked or flagged by active risk rules. Use Audience Explorer for export and deeper review.",
+                "This table shows customers who are blocked or flagged by active risk rules. Review these customers before launch, then use Audience Explorer for full export and deeper operational review.",
                 style={"color": COLORS["muted"], "margin": "0 0 14px 0", "lineHeight": "1.45"},
             ),
             create_table(rows),
@@ -8796,26 +8800,26 @@ def update_guardrails_from_active_master(active_data):
 
     if total_customers == 0:
         interpretation = create_insight_card(
-            "Guardrail Interpretation",
+            "Launch Readiness Interpretation",
             "No active customers are available for guardrail review.",
             variant="warning",
         )
     elif hard_fail_count == 0 and review_count == 0:
         interpretation = create_insight_card(
-            "Guardrail Interpretation",
-            "No active customers failed hard stop rules or review watchlist rules. The current active portfolio is clean from a guardrail perspective, but campaign launches should still be reviewed before execution.",
+            "Launch Readiness Interpretation",
+            "No active customers failed hard-stop or review watchlist rules. The active portfolio is launch-ready from a guardrail perspective, but campaign-specific audience checks should still be reviewed before execution.",
             variant="success",
         )
     elif hard_fail_count == 0:
         interpretation = create_insight_card(
-            "Guardrail Interpretation",
-            f"No active customers failed hard stop rules, but {review_count:,} customer(s) are on the review watchlist. Use controlled testing or manual review before scaling offers.",
+            "Launch Readiness Interpretation",
+            f"No active customers failed hard-stop rules, but {review_count:,} customer(s) are on the review watchlist. Keep broad rollout constrained until these customers are reviewed or routed into a controlled test.",
             variant="warning",
         )
     else:
         interpretation = create_insight_card(
-            "Guardrail Interpretation",
-            f"{hard_fail_count:,} active customer(s) failed hard stop rules. These customers should not receive aggressive growth offers until risk conditions improve.",
+            "Launch Readiness Interpretation",
+            f"{hard_fail_count:,} active customer(s) failed hard-stop rules. Exclude these customers from aggressive growth offers and route them to protective treatment or manual risk review before launch.",
             variant="warning",
         )
 
