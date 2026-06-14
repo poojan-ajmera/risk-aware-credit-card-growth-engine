@@ -1659,11 +1659,11 @@ def create_strategy_flow_diagram() -> html.Div:
     return html.Div(
         children=[
             html.H3(
-                "Decision Flow Sketch",
+                "Operating Decision Flow",
                 style={"fontSize": "22px", "fontWeight": "900", "margin": "0 0 8px 0"},
             ),
             html.P(
-                "This sketch shows how the dashboard moves from raw portfolio insight to campaign execution and final risk review.",
+                "This flow shows how the product converts customer portfolio data into segment strategy, campaign decisions, experiment design, customer export, and final guardrail review.",
                 style={"color": COLORS["muted"], "lineHeight": "1.5", "margin": "0 0 16px 0"},
             ),
             html.Div(
@@ -1811,11 +1811,11 @@ def create_strategy_playbook_table() -> html.Div:
     return html.Div(
         children=[
             html.H3(
-                "Active Segment Strategy Playbook",
+                "Segment Strategy Cards",
                 style={"fontSize": "22px", "fontWeight": "900", "margin": "0 0 8px 0"},
             ),
             html.P(
-                "These strategy cards are rebuilt from the active master dataset. They show which segments exist, how valuable/risky they are, what strategy should be used, and what action should happen next.",
+                "These cards are rebuilt from the active master dataset. Each card explains the segment priority, recommended posture, risk-return profile, and next business action.",
                 style={"color": COLORS["muted"], "lineHeight": "1.5", "margin": "0 0 16px 0"},
             ),
             html.Div(
@@ -1855,11 +1855,11 @@ def create_strategy_cta_panel() -> html.Div:
                         },
                     ),
                     html.H3(
-                        "What should the business do next?",
+                        "Recommended operating strategy",
                         style={"fontSize": "24px", "fontWeight": "900", "margin": "0 0 8px 0"},
                     ),
                     html.P(
-                        "This section reads the active master dataset and turns the portfolio into a practical next-step strategy. When a customer file is uploaded, the playbook recalculates from that uploaded portfolio.",
+                        "This section turns the active portfolio into an executive operating recommendation. When a customer file is uploaded, the playbook recalculates segment priorities, risk posture, and next actions from that uploaded dataset.",
                         style={"color": COLORS["muted"], "lineHeight": "1.5", "margin": "0"},
                     ),
                 ]
@@ -2290,8 +2290,8 @@ def create_campaigns_action_panel() -> html.Div:
 
 def create_playbook_action_panel() -> html.Div:
     return create_workflow_cta_panel(
-        "Use the playbook to take action",
-        "Use these shortcuts to move from active strategy into execution.",
+        "Move from strategy to execution",
+        "Use these shortcuts to move from the active segment recommendation into campaign selection, simulation, audience export, and final risk review.",
         [
             {
                 "label": "Choose Campaign",
@@ -4907,8 +4907,8 @@ app.layout = html.Div(
                         create_strategy_risk_return_section(),
                         create_strategy_playbook_table(),
                         create_insight_card(
-                            "How to read this playbook",
-                            "Use this page as the business decision layer. The flow sketch explains the end-to-end process, the risk-return matrix shows why each segment needs a different rollout posture, and the strategy cards turn the analysis into segment-level actions.",
+                            "How to use this playbook",
+                            "Use this page as the business decision layer. Start with the executive recommendation, review the operating flow, validate segment risk-return tradeoffs, then use the strategy cards to decide which groups should scale, test, constrain, or remain protected.",
                         ),
                     ],
                 ),
@@ -8199,7 +8199,7 @@ def render_strategy_executive_panel(master_df: pd.DataFrame, strategy_df: pd.Dat
                     create_kpi_card("Active Customers", f"{total_customers:,}", "Current master dataset", "#2563eb"),
                     create_kpi_card("Segments Found", f"{len(strategy_df):,}", "Segments in active data", "#0ea5e9"),
                     create_kpi_card("Top Strategy", top_decision, f"Primary segment: {top_segment}", "#7c3aed"),
-                    create_kpi_card("Next Move", "Action Required", next_move, "#16a34a"),
+                    create_kpi_card("Recommended Move", "Action Required", next_move, "#16a34a"),
                 ],
                 style={
                     "display": "grid",
@@ -8210,9 +8210,9 @@ def render_strategy_executive_panel(master_df: pd.DataFrame, strategy_df: pd.Dat
             ),
             html.Div(
                 children=[
-                    html.Strong("Strategy explanation: "),
-                    f"The playbook is using the active master dataset and recommends '{top_decision}' for {top_segment}. "
-                    f"{top_row['strategy_reason']}",
+                    html.Strong("Executive recommendation: "),
+                    f"Based on the active master dataset, the playbook recommends '{top_decision}' for {top_segment}. "
+                    f"{top_row['strategy_reason']} Use this as the starting point for campaign selection, simulation, audience review, and final guardrail approval.",
                 ],
                 style={
                     "backgroundColor": "#eff6ff",
@@ -8387,7 +8387,7 @@ def render_strategy_playbook_table(strategy_df: pd.DataFrame):
         children=cards,
         style={
             "display": "grid",
-            "gridTemplateColumns": "repeat(auto-fit, minmax(460px, 1fr))",
+            "gridTemplateColumns": "repeat(auto-fit, minmax(390px, 1fr))",
             "gap": "14px",
         },
     )
