@@ -4968,17 +4968,325 @@ app.layout = html.Div(
                             "Use this tab to understand which customer groups drive the largest opportunity. It compares segment size, campaign eligibility, and decision mix so business teams can prioritize where to scale, test, or apply guardrails.",
                         ),
                         html.Div(
+                            id="segment-command-center",
                             children=[
-                                create_chart_card("Segment Size", "Customer concentration across the portfolio.", segment_count_fig, "segment-size-chart"),
-                                create_chart_card("Eligibility Rate", "Which segments have the highest share of Scale/Test decisions.", eligible_fig, "segment-eligibility-chart"),
+                                create_insight_card(
+                                    "Segment Command Center",
+                                    "This section will summarize which customer groups deserve growth, testing, protection, or monitoring based on the active portfolio.",
+                                )
                             ],
-                            style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "18px", "marginTop": "22px"},
+                            style={"marginTop": "22px"},
                         ),
-                        html.Div(style={"height": "18px"}),
-                        create_chart_card("Segment Decision Mix", "How Scale, Test, Do Not Launch, and Block decisions differ across customer segments.", segment_stack_fig, "segment-decision-mix-chart"),
                         html.Div(
                             children=[
-                                html.H3("Priority Segment Table", style={"margin": "0 0 14px 0", "fontSize": "20px", "fontWeight": "800"}),
+                                html.H3(
+                                    "Move from segment strategy to action",
+                                    style={
+                                        "margin": "0 0 6px 0",
+                                        "fontSize": "22px",
+                                        "fontWeight": "900",
+                                        "color": COLORS["text"],
+                                    },
+                                ),
+                                html.P(
+                                    "After choosing a segment, compare campaigns, simulate impact, export the right audience, and review guardrails before launch.",
+                                    style={
+                                        "margin": "0 0 14px 0",
+                                        "color": COLORS["muted"],
+                                        "lineHeight": "1.45",
+                                    },
+                                ),
+                                html.Div(
+                                    children=[
+                                        html.Button(
+                                            "Choose Campaign",
+                                            id="cta-segment-campaigns",
+                                            n_clicks=0,
+                                            style={
+                                                "border": "none",
+                                                "borderRadius": "12px",
+                                                "padding": "12px 18px",
+                                                "backgroundColor": COLORS["blue"],
+                                                "color": "white",
+                                                "fontWeight": "900",
+                                                "cursor": "pointer",
+                                                "boxShadow": "0 8px 18px rgba(37, 99, 235, 0.22)",
+                                            },
+                                        ),
+                                        html.Button(
+                                            "Simulate Impact",
+                                            id="cta-segment-scenario",
+                                            n_clicks=0,
+                                            style={
+                                                "border": "none",
+                                                "borderRadius": "12px",
+                                                "padding": "12px 18px",
+                                                "backgroundColor": "#f97316",
+                                                "color": "white",
+                                                "fontWeight": "900",
+                                                "cursor": "pointer",
+                                                "boxShadow": "0 8px 18px rgba(249, 115, 22, 0.22)",
+                                            },
+                                        ),
+                                        html.Button(
+                                            "Export Audience",
+                                            id="cta-segment-audience",
+                                            n_clicks=0,
+                                            style={
+                                                "border": "none",
+                                                "borderRadius": "12px",
+                                                "padding": "12px 18px",
+                                                "backgroundColor": "#16a34a",
+                                                "color": "white",
+                                                "fontWeight": "900",
+                                                "cursor": "pointer",
+                                                "boxShadow": "0 8px 18px rgba(22, 163, 74, 0.22)",
+                                            },
+                                        ),
+                                        html.Button(
+                                            "Review Guardrails",
+                                            id="cta-segment-guardrails",
+                                            n_clicks=0,
+                                            style={
+                                                "border": "none",
+                                                "borderRadius": "12px",
+                                                "padding": "12px 18px",
+                                                "backgroundColor": "#dc2626",
+                                                "color": "white",
+                                                "fontWeight": "900",
+                                                "cursor": "pointer",
+                                                "boxShadow": "0 8px 18px rgba(220, 38, 38, 0.22)",
+                                            },
+                                        ),
+                                    ],
+                                    style={"display": "flex", "flexWrap": "wrap", "gap": "10px"},
+                                ),
+                            ],
+                            style={
+                                "backgroundColor": COLORS["card"],
+                                "border": f"1px solid {COLORS['border']}",
+                                "borderRadius": "18px",
+                                "padding": "20px",
+                                "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                                "marginTop": "18px",
+                            },
+                        ),
+                        html.Div(
+                            children=[
+                                html.Div(
+                                    children=[
+                                        html.Div(
+                                            "SEGMENT STRATEGY ASSISTANT",
+                                            style={
+                                                "fontSize": "12px",
+                                                "fontWeight": "900",
+                                                "letterSpacing": "0.12em",
+                                                "color": "#2563eb",
+                                                "marginBottom": "8px",
+                                            },
+                                        ),
+                                        html.H3(
+                                            "Ask what each segment means or what to do next",
+                                            style={
+                                                "margin": "0 0 8px 0",
+                                                "fontSize": "22px",
+                                                "fontWeight": "900",
+                                                "color": COLORS["text"],
+                                            },
+                                        ),
+                                        html.P(
+                                            "Use this assistant to translate segment names, risk signals, and business actions into plain English.",
+                                            style={
+                                                "margin": "0 0 14px 0",
+                                                "color": COLORS["muted"],
+                                                "lineHeight": "1.45",
+                                            },
+                                        ),
+                                        dcc.Textarea(
+                                            id="segment-assistant-question",
+                                            value="Which segment should I prioritize and why?",
+                                            placeholder="Ask: What does Dormant but Recoverable mean? Which segment is risky? Which group should I test?",
+                                            style={
+                                                "width": "100%",
+                                                "minHeight": "88px",
+                                                "border": f"1px solid {COLORS['border']}",
+                                                "borderRadius": "14px",
+                                                "padding": "12px",
+                                                "fontSize": "14px",
+                                                "fontFamily": "Arial",
+                                                "resize": "vertical",
+                                                "boxSizing": "border-box",
+                                            },
+                                        ),
+                                        html.Div(
+                                            children=[
+                                                html.Button("Who should I grow?", id="segment-prompt-grow", n_clicks=0, style={"border": "none", "borderRadius": "999px", "padding": "9px 12px", "fontWeight": "800", "backgroundColor": "#eff6ff", "color": "#1d4ed8", "cursor": "pointer"}),
+                                                html.Button("Who is risky?", id="segment-prompt-risk", n_clicks=0, style={"border": "none", "borderRadius": "999px", "padding": "9px 12px", "fontWeight": "800", "backgroundColor": "#fef2f2", "color": "#b91c1c", "cursor": "pointer"}),
+                                                html.Button("What do segments mean?", id="segment-prompt-meaning", n_clicks=0, style={"border": "none", "borderRadius": "999px", "padding": "9px 12px", "fontWeight": "800", "backgroundColor": "#f0fdf4", "color": "#15803d", "cursor": "pointer"}),
+                                                html.Button("Best test segment?", id="segment-prompt-test", n_clicks=0, style={"border": "none", "borderRadius": "999px", "padding": "9px 12px", "fontWeight": "800", "backgroundColor": "#faf5ff", "color": "#7e22ce", "cursor": "pointer"}),
+                                            ],
+                                            style={"display": "flex", "flexWrap": "wrap", "gap": "8px", "marginTop": "12px"},
+                                        ),
+                                        html.Button(
+                                            "Run Segment Analysis",
+                                            id="segment-assistant-run-button",
+                                            n_clicks=0,
+                                            style={
+                                                "border": "none",
+                                                "borderRadius": "14px",
+                                                "padding": "12px 16px",
+                                                "fontWeight": "900",
+                                                "color": "white",
+                                                "background": "linear-gradient(135deg, #2563eb, #7c3aed)",
+                                                "cursor": "pointer",
+                                                "width": "100%",
+                                                "marginTop": "14px",
+                                                "boxShadow": "0 10px 22px rgba(37, 99, 235, 0.22)",
+                                            },
+                                        ),
+                                        html.Div(
+                                            id="segment-assistant-answer",
+                                            children=[
+                                                html.Div(
+                                                    "Assistant ready",
+                                                    style={"fontSize": "12px", "fontWeight": "900", "letterSpacing": "0.10em", "color": "#2563eb", "textTransform": "uppercase", "marginBottom": "8px"},
+                                                ),
+                                                html.Div(
+                                                    "Ask a segment question to get a plain-English recommendation.",
+                                                    style={"fontSize": "14px", "color": COLORS["muted"], "lineHeight": "1.5"},
+                                                ),
+                                            ],
+                                            style={
+                                                "backgroundColor": "#f8fafc",
+                                                "border": f"1px solid {COLORS['border']}",
+                                                "borderRadius": "16px",
+                                                "padding": "16px",
+                                                "marginTop": "16px",
+                                            },
+                                        ),
+                                    ],
+                                    style={
+                                        "backgroundColor": COLORS["card"],
+                                        "border": f"1px solid {COLORS['border']}",
+                                        "borderRadius": "22px",
+                                        "padding": "22px",
+                                        "boxShadow": "0 14px 32px rgba(15, 23, 42, 0.08)",
+                                    },
+                                ),
+                                html.Div(
+                                    children=[
+                                        html.Div(
+                                            "SEGMENT OPPORTUNITY MAP",
+                                            style={
+                                                "fontSize": "12px",
+                                                "fontWeight": "900",
+                                                "letterSpacing": "0.12em",
+                                                "color": "#2563eb",
+                                                "marginBottom": "8px",
+                                            },
+                                        ),
+                                        html.H3(
+                                            "Risk vs value by customer group",
+                                            style={
+                                                "margin": "0 0 6px 0",
+                                                "fontSize": "22px",
+                                                "fontWeight": "900",
+                                                "color": COLORS["text"],
+                                            },
+                                        ),
+                                        html.P(
+                                            "Each bubble is a segment. Higher is better profit, farther right is more risk, and larger bubbles mean more customers.",
+                                            style={
+                                                "margin": "0 0 8px 0",
+                                                "color": COLORS["muted"],
+                                                "lineHeight": "1.45",
+                                            },
+                                        ),
+                                        dcc.Graph(
+                                            id="segment-opportunity-map-chart",
+                                            figure=go.Figure(),
+                                            config={"displayModeBar": True},
+                                        ),
+                                    ],
+                                    style={
+                                        "backgroundColor": COLORS["card"],
+                                        "border": f"1px solid {COLORS['border']}",
+                                        "borderRadius": "22px",
+                                        "padding": "22px",
+                                        "boxShadow": "0 14px 32px rgba(15, 23, 42, 0.08)",
+                                    },
+                                ),
+                            ],
+                            style={
+                                "display": "grid",
+                                "gridTemplateColumns": "0.85fr 1.15fr",
+                                "gap": "18px",
+                                "marginTop": "18px",
+                            },
+                        ),
+                        create_chart_card(
+                            "Decision Mix Heatmap",
+                            "Which decisions dominate each segment and where risk constraints appear.",
+                            segment_stack_fig,
+                            "segment-decision-mix-chart",
+                        ),
+                        html.Details(
+                            open=False,
+                            children=[
+                                html.Summary(
+                                    "Optional supporting diagnostics",
+                                    style={
+                                        "cursor": "pointer",
+                                        "fontSize": "20px",
+                                        "fontWeight": "900",
+                                        "color": COLORS["text"],
+                                        "padding": "4px 0",
+                                    },
+                                ),
+                                html.P(
+                                    "Open this only when you want backup evidence for segment volume and readiness. The command center, assistant, opportunity map, heatmap, and action table are the main decision views.",
+                                    style={
+                                        "margin": "10px 0 16px 0",
+                                        "color": COLORS["muted"],
+                                        "lineHeight": "1.45",
+                                    },
+                                ),
+                                html.Div(
+                                    children=[
+                                        create_chart_card(
+                                            "Segment Portfolio Tree",
+                                            "Optional diagnostic view of how customer groups split by decision status.",
+                                            segment_count_fig,
+                                            "segment-size-chart",
+                                        ),
+                                        create_chart_card(
+                                            "Segment Readiness Ladder",
+                                            "Optional diagnostic view of launch-ready, test-ready, hold, and blocked volume by segment.",
+                                            eligible_fig,
+                                            "segment-eligibility-chart",
+                                        ),
+                                    ],
+                                    style={
+                                        "display": "grid",
+                                        "gridTemplateColumns": "1fr 1fr",
+                                        "gap": "18px",
+                                        "marginTop": "14px",
+                                    },
+                                ),
+                            ],
+                            style={
+                                "backgroundColor": COLORS["card"],
+                                "border": f"1px solid {COLORS['border']}",
+                                "borderRadius": "18px",
+                                "padding": "18px 20px",
+                                "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                                "marginTop": "18px",
+                                "marginBottom": "18px",
+                            },
+                        ),
+                        html.Div(
+                            children=[
+                                html.H3("Segment Action Table", style={"margin": "0 0 14px 0", "fontSize": "20px", "fontWeight": "800"}),
                                 html.Div(id="priority-segment-table-container", children=create_table(priority_rows)),
                             ],
                             style={
@@ -4992,8 +5300,8 @@ app.layout = html.Div(
                             },
                         ),
                         create_insight_card(
-                            "Segment-Level Takeaway",
-                            "Use the priority table above to decide which active segments should scale, test, or remain under guardrail review. Uploaded files may change this takeaway based on the active portfolio.",
+                            "Segment Strategy Takeaway",
+                            "Use this page to decide the segment-level operating posture: grow, test, monitor, or protect. Uploaded files may change the recommendation because all summaries recalculate from the active portfolio.",
                         ),
                     ],
                 ),
@@ -6531,51 +6839,96 @@ def update_filtered_charts(selected_segments, selected_decisions, selected_risks
         return polish(fig, "Decision Status Count")
 
     def segment_size_figure(df):
-        counts = value_counts_frame(df, "customer_segment", "customer_segment", "customers")
-        if counts.empty:
-            return master_empty_figure("Customer Count by Segment")
+        if df.empty or "customer_segment" not in df.columns:
+            return master_empty_figure("Segment Portfolio Tree")
 
-        fig = px.bar(
-            counts.sort_values("customers", ascending=True),
-            x="customers",
-            y="customer_segment",
-            orientation="h",
-            title="Customer Count by Segment",
-            text="customers",
+        tree_df = df.copy()
+
+        if "decision_status" not in tree_df.columns:
+            tree_df["decision_status"] = "Unknown"
+
+        tree = (
+            tree_df
+            .groupby(["customer_segment", "decision_status"], as_index=False)
+            .size()
+            .rename(columns={"size": "customers"})
         )
-        fig.update_traces(texttemplate="%{text:,}", textposition="outside")
-        fig.update_layout(showlegend=False, xaxis_title="Customer Count", yaxis_title="")
-        return polish(fig, "Customer Count by Segment")
+
+        if tree.empty:
+            return master_empty_figure("Segment Portfolio Tree")
+
+        fig = px.treemap(
+            tree,
+            path=["customer_segment", "decision_status"],
+            values="customers",
+            color="decision_status",
+            color_discrete_map=DECISION_COLOR_MAP,
+            title="Segment Portfolio Tree",
+            custom_data=["customers"],
+        )
+
+        fig.update_traces(
+            textinfo="label+value",
+            hovertemplate="<b>%{label}</b><br>Customers: %{customdata[0]:,}<extra></extra>",
+            marker={"line": {"width": 1, "color": "white"}},
+        )
+        fig = polish(fig, "Segment Portfolio Tree")
+        fig.update_layout(height=360, margin={"l": 20, "r": 20, "t": 60, "b": 20})
+        return fig
 
     def segment_eligibility_figure(df):
         if df.empty or "customer_segment" not in df.columns or "decision_status" not in df.columns:
-            return master_empty_figure("Scale/Test Eligibility by Segment")
+            return master_empty_figure("Segment Readiness Ladder")
 
-        segment_frame = df.copy()
-        segment_frame["eligible_flag"] = segment_frame["decision_status"].isin(["Scale", "Test"]).astype(int)
-
-        summary = (
-            segment_frame
-            .groupby("customer_segment", as_index=False)
-            .agg(customers=("customer_id", "count"), eligible=("eligible_flag", "sum"))
+        ladder = (
+            df
+            .groupby(["customer_segment", "decision_status"], as_index=False)
+            .size()
+            .rename(columns={"size": "customers"})
         )
-        summary["eligible_rate"] = summary["eligible"] / summary["customers"] * 100
+
+        if ladder.empty:
+            return master_empty_figure("Segment Readiness Ladder")
+
+        order_frame = (
+            ladder[ladder["decision_status"].isin(["Scale", "Test"])]
+            .groupby("customer_segment", as_index=False)["customers"]
+            .sum()
+            .rename(columns={"customers": "scale_test_customers"})
+        )
+
+        all_segments = pd.DataFrame({"customer_segment": sorted(ladder["customer_segment"].dropna().astype(str).unique())})
+        order_frame = all_segments.merge(order_frame, on="customer_segment", how="left").fillna({"scale_test_customers": 0})
+        segment_order = order_frame.sort_values("scale_test_customers", ascending=True)["customer_segment"].tolist()
 
         fig = px.bar(
-            summary.sort_values("eligible_rate", ascending=True),
-            x="eligible_rate",
+            ladder,
+            x="customers",
             y="customer_segment",
+            color="decision_status",
             orientation="h",
-            title="Scale/Test Eligibility by Segment",
-            text=summary["eligible_rate"].round(1),
+            title="Segment Readiness Ladder",
+            color_discrete_map=DECISION_COLOR_MAP,
+            category_orders={"customer_segment": segment_order},
+            custom_data=["customers"],
         )
-        fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-        fig.update_layout(showlegend=False, xaxis_title="Eligible Rate", yaxis_title="")
-        return polish(fig, "Scale/Test Eligibility by Segment")
+
+        fig.update_traces(
+            hovertemplate="<b>%{y}</b><br>Decision: %{legendgroup}<br>Customers: %{customdata[0]:,}<extra></extra>",
+        )
+        fig.update_layout(
+            barmode="stack",
+            xaxis_title="Customer Count",
+            yaxis_title="",
+            legend_title_text="Decision",
+        )
+        fig = polish(fig, "Segment Readiness Ladder")
+        fig.update_layout(height=360)
+        return fig
 
     def segment_decision_mix_figure(df):
         if df.empty or "customer_segment" not in df.columns or "decision_status" not in df.columns:
-            return master_empty_figure("Decision Mix by Segment")
+            return master_empty_figure("Decision Mix Heatmap")
 
         mix = (
             df.groupby(["customer_segment", "decision_status"], as_index=False)
@@ -6583,16 +6936,65 @@ def update_filtered_charts(selected_segments, selected_decisions, selected_risks
             .rename(columns={"size": "customers"})
         )
 
-        fig = px.bar(
-            mix,
-            x="customer_segment",
-            y="customers",
-            color="decision_status",
-            title="Decision Mix by Segment",
-            color_discrete_map=DECISION_COLOR_MAP,
+        if mix.empty:
+            return master_empty_figure("Decision Mix Heatmap")
+
+        pivot = (
+            mix
+            .pivot(index="customer_segment", columns="decision_status", values="customers")
+            .fillna(0)
         )
-        fig.update_layout(barmode="stack", xaxis_title="", yaxis_title="Customer Count")
-        return polish(fig, "Decision Mix by Segment")
+
+        preferred_columns = ["Scale", "Test", "Do Not Launch", "Block"]
+        ordered_columns = [column for column in preferred_columns if column in pivot.columns] + [
+            column for column in pivot.columns if column not in preferred_columns
+        ]
+        pivot = pivot[ordered_columns]
+
+        row_totals = pivot.sum(axis=1).replace(0, pd.NA)
+        pct = pivot.div(row_totals, axis=0).fillna(0) * 100
+
+        if "Scale" in pivot.columns or "Test" in pivot.columns:
+            scale_test = pivot[[column for column in ["Scale", "Test"] if column in pivot.columns]].sum(axis=1)
+            row_order = scale_test.sort_values(ascending=False).index.tolist()
+            pivot = pivot.loc[row_order]
+            pct = pct.loc[row_order]
+
+        fig = go.Figure(
+            data=go.Heatmap(
+                z=pct.values,
+                x=pct.columns.tolist(),
+                y=pct.index.tolist(),
+                colorscale=[
+                    [0.00, "#f8fafc"],
+                    [0.35, "#bfdbfe"],
+                    [0.70, "#3b82f6"],
+                    [1.00, "#1e3a8a"],
+                ],
+                text=pivot.values.astype(int),
+                customdata=pivot.values.astype(int),
+                texttemplate="%{z:.0f}%",
+                hovertemplate=(
+                    "<b>%{y}</b><br>"
+                    "Decision: %{x}<br>"
+                    "Share of segment: %{z:.1f}%<br>"
+                    "Customers: %{customdata:,}<extra></extra>"
+                ),
+                colorbar={"title": "Share"},
+            )
+        )
+
+        fig.update_layout(
+            title="Decision Mix Heatmap",
+            height=390,
+            margin={"l": 140, "r": 40, "t": 60, "b": 60},
+            paper_bgcolor="white",
+            plot_bgcolor="white",
+            font={"family": "Arial", "size": 12, "color": COLORS["text"]},
+            xaxis_title="Decision Status",
+            yaxis_title="Customer Segment",
+        )
+        return fig
 
     def action_mix_figure(df):
         counts = value_counts_frame(df, "recommended_action", "recommended_action", "customers")
@@ -7804,6 +8206,10 @@ def download_ab_customer_list_excel(n_clicks, campaign_id, segment, audience_typ
     Input("cta-playbook-scenario", "n_clicks"),
     Input("cta-playbook-audience", "n_clicks"),
     Input("cta-playbook-guardrails", "n_clicks"),
+    Input("cta-segment-campaigns", "n_clicks"),
+    Input("cta-segment-scenario", "n_clicks"),
+    Input("cta-segment-audience", "n_clicks"),
+    Input("cta-segment-guardrails", "n_clicks"),
     Input("cta-guardrails-audience", "n_clicks"),
     Input("cta-guardrails-playbook", "n_clicks"),
     Input("cta-guardrails-ab", "n_clicks"),
@@ -7828,6 +8234,10 @@ def navigate_from_dashboard_guides(
     cta_playbook_scenario,
     cta_playbook_audience,
     cta_playbook_guardrails,
+    cta_segment_campaigns,
+    cta_segment_scenario,
+    cta_segment_audience,
+    cta_segment_guardrails,
     cta_guardrails_audience,
     cta_guardrails_playbook,
     cta_guardrails_ab,
@@ -7879,6 +8289,11 @@ def navigate_from_dashboard_guides(
         "cta-playbook-scenario": ("decision-workbench", "scenario-simulator"),
         "cta-playbook-audience": ("decision-workbench", "customer-explorer"),
         "cta-playbook-guardrails": ("guardrails", "customer-lookup"),
+
+        "cta-segment-campaigns": ("campaigns-offers", "customer-lookup"),
+        "cta-segment-scenario": ("decision-workbench", "scenario-simulator"),
+        "cta-segment-audience": ("decision-workbench", "customer-explorer"),
+        "cta-segment-guardrails": ("guardrails", "customer-lookup"),
 
         "cta-guardrails-audience": ("decision-workbench", "customer-explorer"),
         "cta-guardrails-playbook": ("strategy-playbook", "customer-lookup"),
@@ -8045,18 +8460,666 @@ def build_priority_segment_rows_from_active_data(df: pd.DataFrame) -> list[dict]
 
 
 @app.callback(
+    Output("segment-assistant-question", "value"),
+    Input("segment-prompt-grow", "n_clicks"),
+    Input("segment-prompt-risk", "n_clicks"),
+    Input("segment-prompt-meaning", "n_clicks"),
+    Input("segment-prompt-test", "n_clicks"),
+    prevent_initial_call=True,
+)
+def update_segment_assistant_question(grow_clicks, risk_clicks, meaning_clicks, test_clicks):
+    trigger = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else ""
+
+    prompt_map = {
+        "segment-prompt-grow": "Which segment should I grow first and why?",
+        "segment-prompt-risk": "Which segment is risky and what should I do with it?",
+        "segment-prompt-meaning": "What do these customer segments mean in plain English?",
+        "segment-prompt-test": "Which segment is best for a controlled test?",
+    }
+
+    return prompt_map.get(trigger, "Which segment should I prioritize and why?")
+
+
+@app.callback(
+    Output("segment-opportunity-map-chart", "figure"),
+    Input("filter-segment", "value"),
+    Input("filter-decision", "value"),
+    Input("filter-risk", "value"),
+    Input("filter-action", "value"),
+    Input("active-customer-data-store", "data"),
+)
+def update_segment_opportunity_map(selected_segments, selected_decisions, selected_risks, selected_actions, active_data):
+    master_df = get_active_customer_features(active_data)
+    df = apply_global_filters(
+        selected_segments,
+        selected_decisions,
+        selected_risks,
+        selected_actions,
+        master_df,
+    )
+
+    if df.empty or "customer_segment" not in df.columns:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No segment data available for this active view.",
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            font={"size": 14, "color": COLORS["muted"]},
+        )
+        fig.update_layout(height=430, paper_bgcolor="white", plot_bgcolor="white")
+        return fig
+
+    working = df.copy()
+
+    for column in ["risk_adjusted_profit", "expected_roi", "default_probability"]:
+        if column not in working.columns:
+            working[column] = 0
+        working[column] = pd.to_numeric(working[column], errors="coerce").fillna(0)
+
+    if "decision_status" not in working.columns:
+        working["decision_status"] = "Do Not Launch"
+
+    working["scale_flag"] = (working["decision_status"] == "Scale").astype(int)
+    working["test_flag"] = (working["decision_status"] == "Test").astype(int)
+    working["block_flag"] = (working["decision_status"] == "Block").astype(int)
+    working["eligible_flag"] = working["decision_status"].isin(["Scale", "Test"]).astype(int)
+
+    summary = (
+        working.groupby("customer_segment", as_index=False)
+        .agg(
+            customers=("customer_segment", "size"),
+            avg_profit=("risk_adjusted_profit", "mean"),
+            total_profit=("risk_adjusted_profit", "sum"),
+            avg_roi=("expected_roi", "mean"),
+            avg_default=("default_probability", "mean"),
+            scale_customers=("scale_flag", "sum"),
+            test_customers=("test_flag", "sum"),
+            blocked_customers=("block_flag", "sum"),
+            eligible_customers=("eligible_flag", "sum"),
+        )
+    )
+
+    summary["eligible_rate"] = summary["eligible_customers"] / summary["customers"].replace(0, pd.NA)
+    summary["block_rate"] = summary["blocked_customers"] / summary["customers"].replace(0, pd.NA)
+    summary["eligible_rate"] = summary["eligible_rate"].fillna(0)
+    summary["block_rate"] = summary["block_rate"].fillna(0)
+    summary["avg_default_pct"] = summary["avg_default"] * 100
+
+    def strategy_label(row):
+        if row["avg_default"] >= 0.08 or row["block_rate"] >= 0.10:
+            return "Protect / Review"
+        if row["avg_profit"] > 0 and row["eligible_rate"] >= 0.50:
+            return "Grow / Test"
+        if row["test_customers"] > row["scale_customers"]:
+            return "Controlled Test"
+        return "Monitor"
+
+    summary["segment_strategy"] = summary.apply(strategy_label, axis=1)
+
+    color_map = {
+        "Grow / Test": "#16a34a",
+        "Controlled Test": "#7c3aed",
+        "Protect / Review": "#dc2626",
+        "Monitor": "#94a3b8",
+    }
+
+    # Label only the most important bubbles to avoid a crowded chart.
+    top_customer_segments = set(summary.sort_values("customers", ascending=False).head(3)["customer_segment"].astype(str))
+    high_risk_segments = set(summary[summary["segment_strategy"] == "Protect / Review"]["customer_segment"].astype(str))
+    summary["display_label"] = summary["customer_segment"].astype(str).where(
+        summary["customer_segment"].astype(str).isin(top_customer_segments.union(high_risk_segments)),
+        "",
+    )
+
+    fig = px.scatter(
+        summary,
+        x="avg_default_pct",
+        y="avg_profit",
+        size="customers",
+        color="segment_strategy",
+        color_discrete_map=color_map,
+        hover_name="customer_segment",
+        text=None,
+        size_max=58,
+        custom_data=[
+            "customers",
+            "eligible_customers",
+            "blocked_customers",
+            "avg_roi",
+            "total_profit",
+            "eligible_rate",
+        ],
+        title="Segment Opportunity Map",
+    )
+
+    fig.update_traces(
+        marker={"line": {"width": 1, "color": "white"}, "opacity": 0.82},
+        hovertemplate=(
+            "<b>%{hovertext}</b><br>"
+            "Strategy: %{legendgroup}<br>"
+            "Avg default risk: %{x:.1f}%<br>"
+            "Avg risk-adjusted profit: $%{y:,.0f}<br>"
+            "Customers: %{customdata[0]:,}<br>"
+            "Scale/Test customers: %{customdata[1]:,}<br>"
+            "Blocked customers: %{customdata[2]:,}<br>"
+            "Avg ROI: %{customdata[3]:.1f}x<br>"
+            "Total profit: $%{customdata[4]:,.0f}<br>"
+            "Eligible rate: %{customdata[5]:.1%}<extra></extra>"
+        ),
+    )
+
+    fig.add_hline(
+        y=0,
+        line_dash="dash",
+        line_color="#94a3b8",
+        annotation_text="Profit break-even",
+        annotation_position="bottom right",
+    )
+
+    fig.add_vline(
+        x=8,
+        line_dash="dash",
+        line_color="#f97316",
+        annotation_text="Risk review threshold",
+        annotation_position="top right",
+    )
+
+    fig.update_layout(
+        height=430,
+        margin={"l": 55, "r": 25, "t": 60, "b": 55},
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font={"family": "Arial", "size": 12, "color": COLORS["text"]},
+        legend_title_text="Segment strategy",
+        xaxis_title="Average default probability (%)",
+        yaxis_title="Average risk-adjusted profit",
+    )
+
+    return fig
+
+
+@app.callback(
+    Output("segment-assistant-answer", "children"),
+    Input("segment-assistant-run-button", "n_clicks"),
+    State("segment-assistant-question", "value"),
+    State("filter-segment", "value"),
+    State("filter-decision", "value"),
+    State("filter-risk", "value"),
+    State("filter-action", "value"),
+    State("active-customer-data-store", "data"),
+    prevent_initial_call=True,
+)
+def update_segment_assistant_answer(
+    n_clicks,
+    question,
+    selected_segments,
+    selected_decisions,
+    selected_risks,
+    selected_actions,
+    active_data,
+):
+    if not n_clicks:
+        raise PreventUpdate
+
+    master_df = get_active_customer_features(active_data)
+    df = apply_global_filters(
+        selected_segments,
+        selected_decisions,
+        selected_risks,
+        selected_actions,
+        master_df,
+    )
+
+    if df.empty or "customer_segment" not in df.columns:
+        return create_zero_state_card(
+            "No segment data available",
+            "The active filters do not return segment records.",
+            "Clear filters or upload a customer file with customer_segment.",
+        )
+
+    segment_plain_language = {
+        "Core Customer": "Everyday active cardholders with balanced value and manageable risk. Usually a strong group for standard growth offers or controlled tests.",
+        "Loyal High-Value Customer": "High-value relationship customers with strong engagement and spend. Usually a good group for rewards, retention, and premium treatment.",
+        "Dormant but Recoverable": "Customers with lower recent activity but enough relationship history to justify reactivation. Good for win-back or light engagement campaigns.",
+        "Premium Growth Candidate": "Customers with premium potential but weaker current economics or eligibility. Monitor or improve targeting before heavy spend.",
+        "High-Utilization Revolver": "Customers using a high share of available credit. They may generate value, but risk and responsible-lending controls matter more.",
+        "Risk Watch": "Customers with risk signals that should block or constrain growth offers. Use monitoring, servicing, or protective treatment.",
+        "Underused Low-Risk Customer": "Safer customers with low usage. Good for activation tests, but the current value pool may be smaller.",
+    }
+
+    working = df.copy()
+
+    for column in ["risk_adjusted_profit", "expected_roi", "default_probability"]:
+        if column not in working.columns:
+            working[column] = 0
+        working[column] = pd.to_numeric(working[column], errors="coerce").fillna(0)
+
+    if "decision_status" not in working.columns:
+        working["decision_status"] = "Do Not Launch"
+
+    working["scale_flag"] = (working["decision_status"] == "Scale").astype(int)
+    working["test_flag"] = (working["decision_status"] == "Test").astype(int)
+    working["block_flag"] = (working["decision_status"] == "Block").astype(int)
+    working["eligible_flag"] = working["decision_status"].isin(["Scale", "Test"]).astype(int)
+
+    summary = (
+        working.groupby("customer_segment", as_index=False)
+        .agg(
+            customers=("customer_segment", "size"),
+            avg_profit=("risk_adjusted_profit", "mean"),
+            total_profit=("risk_adjusted_profit", "sum"),
+            avg_roi=("expected_roi", "mean"),
+            avg_default=("default_probability", "mean"),
+            scale_customers=("scale_flag", "sum"),
+            test_customers=("test_flag", "sum"),
+            blocked_customers=("block_flag", "sum"),
+            eligible_customers=("eligible_flag", "sum"),
+        )
+    )
+
+    summary["eligible_rate"] = summary["eligible_customers"] / summary["customers"].replace(0, pd.NA)
+    summary["block_rate"] = summary["blocked_customers"] / summary["customers"].replace(0, pd.NA)
+    summary["eligible_rate"] = summary["eligible_rate"].fillna(0)
+    summary["block_rate"] = summary["block_rate"].fillna(0)
+
+    q = (question or "").lower()
+
+    mentioned_segment = None
+    for segment in summary["customer_segment"].astype(str).tolist():
+        if segment.lower() in q:
+            mentioned_segment = segment
+            break
+
+    largest_row = summary.sort_values("customers", ascending=False).iloc[0]
+    profit_row = summary.sort_values("total_profit", ascending=False).iloc[0]
+    risk_row = summary.sort_values(["avg_default", "block_rate"], ascending=False).iloc[0]
+    test_row = summary.sort_values(["test_customers", "eligible_rate"], ascending=False).iloc[0]
+
+    if mentioned_segment:
+        row = summary[summary["customer_segment"].astype(str) == mentioned_segment].iloc[0]
+        title = f"What {mentioned_segment} means"
+        answer = segment_plain_language.get(
+            mentioned_segment,
+            "This segment is a customer group created from portfolio behavior, risk, value, and engagement signals.",
+        )
+        recommendation = (
+            f"In the active view, {mentioned_segment} has {int(row['customers']):,} customers, "
+            f"{int(row['eligible_customers']):,} Scale/Test customers, {int(row['blocked_customers']):,} blocked customers, "
+            f"{format_percent(float(row['avg_default']))} average default risk, and {format_currency(float(row['total_profit']))} total risk-adjusted profit."
+        )
+        accent = "#2563eb"
+
+    elif any(word in q for word in ["mean", "definition", "explain", "what are", "what do", "plain english"]):
+        title = "Plain-English segment definitions"
+        answer = "The segments are not just labels; they describe customer behavior and how carefully the business should act."
+        recommendation = "Core and Loyal groups are usually easier growth pools. Dormant groups need reactivation. High-Utilization and Risk Watch groups require tighter guardrails. Premium and Underused groups need better targeting or activation logic."
+        accent = "#7c3aed"
+
+    elif any(word in q for word in ["risk", "risky", "blocked", "protect", "guardrail"]):
+        title = "Highest-risk segment"
+        answer = (
+            f"The highest-risk segment in the active view is {risk_row['customer_segment']}. "
+            f"It has {int(risk_row['customers']):,} customers, {format_percent(float(risk_row['avg_default']))} average default risk, "
+            f"and {int(risk_row['blocked_customers']):,} blocked customers."
+        )
+        recommendation = "Recommended move: do not push aggressive growth offers here. Use Guardrails, servicing, or controlled treatment."
+        accent = "#dc2626"
+
+    elif any(word in q for word in ["test", "experiment", "controlled"]):
+        title = "Best controlled-test segment"
+        answer = (
+            f"The best controlled-test pool is {test_row['customer_segment']} because it has {int(test_row['test_customers']):,} Test customers "
+            f"and {format_percent(float(test_row['eligible_rate']))} Scale/Test eligibility."
+        )
+        recommendation = "Recommended move: use A/B Test Planner before scaling, then export only the test audience from Audience Explorer."
+        accent = "#7c3aed"
+
+    elif any(word in q for word in ["grow", "scale", "best", "prioritize", "priority"]):
+        title = "Best growth priority"
+        answer = (
+            f"The strongest growth priority is {profit_row['customer_segment']} because it contributes {format_currency(float(profit_row['total_profit']))} "
+            f"in total risk-adjusted profit with {int(profit_row['eligible_customers']):,} Scale/Test customers."
+        )
+        recommendation = "Recommended move: compare campaigns for this segment, simulate economics, then review Guardrails before launch."
+        accent = "#16a34a"
+
+    else:
+        title = "Segment strategy readout"
+        answer = (
+            f"The active view contains {int(len(summary))} customer segments. The largest group is {largest_row['customer_segment']} "
+            f"with {int(largest_row['customers']):,} customers. The strongest profit pool is {profit_row['customer_segment']}. "
+            f"The highest-risk group is {risk_row['customer_segment']}."
+        )
+        recommendation = "Recommended move: use the Opportunity Map first, then use the table for exact segment metrics."
+        accent = "#2563eb"
+
+    return html.Div(
+        children=[
+            html.Div(
+                "Segment answer",
+                style={
+                    "fontSize": "12px",
+                    "fontWeight": "900",
+                    "letterSpacing": "0.10em",
+                    "color": accent,
+                    "textTransform": "uppercase",
+                    "marginBottom": "8px",
+                },
+            ),
+            html.H4(
+                title,
+                style={"margin": "0 0 8px 0", "fontSize": "18px", "fontWeight": "900", "color": COLORS["text"]},
+            ),
+            html.P(
+                answer,
+                style={"margin": "0 0 10px 0", "fontSize": "14px", "lineHeight": "1.55", "color": COLORS["text"]},
+            ),
+            html.Div(
+                recommendation,
+                style={
+                    "backgroundColor": "#f8fafc",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderLeft": f"5px solid {accent}",
+                    "borderRadius": "12px",
+                    "padding": "10px",
+                    "fontSize": "13px",
+                    "lineHeight": "1.45",
+                    "color": COLORS["muted"],
+                },
+            ),
+        ]
+    )
+
+
+@app.callback(
+    Output("segment-command-center", "children"),
+    Input("active-customer-data-store", "data"),
+)
+def update_segment_command_center(active_data):
+    df = get_active_customer_features(active_data).copy()
+
+    if df.empty or "customer_segment" not in df.columns:
+        return create_zero_state_card(
+            "Segment Command Center unavailable",
+            "No segment field is available in the active dataset.",
+            "Upload a customer file with customer_segment or use the synthetic demo portfolio.",
+        )
+
+    total_customers = int(len(df))
+
+    def numeric_column(column):
+        if column not in df.columns:
+            return pd.Series([0] * total_customers)
+        return pd.to_numeric(df[column], errors="coerce").fillna(0)
+
+    df["_risk_adjusted_profit"] = numeric_column("risk_adjusted_profit")
+    df["_default_probability"] = numeric_column("default_probability")
+
+    if "decision_status" not in df.columns:
+        df["decision_status"] = "Do Not Launch"
+
+    summary = (
+        df.groupby("customer_segment", as_index=False)
+        .agg(
+            customers=("customer_segment", "size"),
+            risk_adjusted_profit=("_risk_adjusted_profit", "sum"),
+            avg_default_probability=("_default_probability", "mean"),
+            scale_customers=("decision_status", lambda s: int((s == "Scale").sum())),
+            test_customers=("decision_status", lambda s: int((s == "Test").sum())),
+            blocked_customers=("decision_status", lambda s: int((s == "Block").sum())),
+        )
+    )
+
+    if summary.empty:
+        return create_zero_state_card(
+            "No segment summary available",
+            "The active dataset did not return any segment records.",
+            "Clear filters or upload a broader customer file.",
+        )
+
+    summary["eligible_customers"] = summary["scale_customers"] + summary["test_customers"]
+    summary["eligible_rate"] = summary["eligible_customers"] / summary["customers"].replace(0, pd.NA)
+    summary["block_rate"] = summary["blocked_customers"] / summary["customers"].replace(0, pd.NA)
+    summary["eligible_rate"] = summary["eligible_rate"].fillna(0)
+    summary["block_rate"] = summary["block_rate"].fillna(0)
+
+    largest_row = summary.sort_values("customers", ascending=False).iloc[0]
+    profit_row = summary.sort_values("risk_adjusted_profit", ascending=False).iloc[0]
+    test_row = summary.sort_values(["test_customers", "eligible_rate"], ascending=False).iloc[0]
+    risk_row = summary.sort_values(["avg_default_probability", "block_rate"], ascending=False).iloc[0]
+
+    if float(risk_row["avg_default_probability"]) >= 0.08 or float(risk_row["block_rate"]) >= 0.10:
+        recommended_move = "Protect high-risk segments first, then grow only through controlled tests."
+        move_accent = "#dc2626"
+    elif float(profit_row["eligible_rate"]) >= 0.50:
+        recommended_move = f"Prioritize {profit_row['customer_segment']} for campaign selection and validation."
+        move_accent = "#16a34a"
+    else:
+        recommended_move = "Use controlled testing before broad rollout; the portfolio is not a simple scale-only case."
+        move_accent = "#2563eb"
+
+    def segment_card(title, row, subtitle, accent):
+        return html.Div(
+            children=[
+                html.Div(style={"width": "44px", "height": "4px", "borderRadius": "999px", "backgroundColor": accent, "marginBottom": "12px"}),
+                html.Div(title, style={"fontSize": "12px", "fontWeight": "900", "color": COLORS["muted"], "textTransform": "uppercase"}),
+                html.H3(str(row["customer_segment"]), style={"margin": "6px 0 8px 0", "fontSize": "20px", "fontWeight": "900", "color": COLORS["text"]}),
+                html.Div(subtitle, style={"fontSize": "13px", "lineHeight": "1.4", "color": COLORS["muted"], "marginBottom": "12px"}),
+                html.Div(
+                    children=[
+                        create_metric_chip("Customers", f"{int(row['customers']):,}"),
+                        create_metric_chip("Scale/Test", f"{int(row['eligible_customers']):,}"),
+                        create_metric_chip("Default risk", format_percent(float(row["avg_default_probability"]))),
+                    ],
+                    style={"display": "grid", "gridTemplateColumns": "repeat(3, minmax(0, 1fr))", "gap": "8px"},
+                ),
+            ],
+            style={
+                "backgroundColor": COLORS["card"],
+                "border": f"1px solid {COLORS['border']}",
+                "borderRadius": "18px",
+                "padding": "18px",
+                "boxShadow": "0 10px 24px rgba(15, 23, 42, 0.06)",
+            },
+        )
+
+    return html.Div(
+        children=[
+            html.Div(
+                children=[
+                    html.Div(
+                        "SEGMENT COMMAND CENTER",
+                        style={"fontSize": "12px", "fontWeight": "900", "letterSpacing": "0.12em", "color": "#2563eb", "marginBottom": "8px"},
+                    ),
+                    html.H2(
+                        "Which customer groups deserve attention first?",
+                        style={"margin": "0 0 8px 0", "fontSize": "26px", "fontWeight": "900", "color": COLORS["text"]},
+                    ),
+                    html.P(
+                        "This command layer reads the active portfolio and turns segment size, eligibility, risk, and profit into a practical operating view.",
+                        style={"margin": "0", "fontSize": "15px", "lineHeight": "1.5", "color": COLORS["muted"]},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Strong("Recommended move: "),
+                            recommended_move,
+                        ],
+                        style={
+                            "marginTop": "16px",
+                            "backgroundColor": "#f8fafc",
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderLeft": f"5px solid {move_accent}",
+                            "borderRadius": "14px",
+                            "padding": "14px",
+                            "fontSize": "14px",
+                            "lineHeight": "1.5",
+                            "color": COLORS["text"],
+                        },
+                    ),
+                ],
+                style={
+                    "backgroundColor": COLORS["card"],
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "20px",
+                    "padding": "22px",
+                    "boxShadow": "0 12px 28px rgba(15, 23, 42, 0.06)",
+                },
+            ),
+            html.Div(
+                children=[
+                    segment_card(
+                        "Largest segment",
+                        largest_row,
+                        "This group has the most customers and usually drives volume planning.",
+                        "#2563eb",
+                    ),
+                    segment_card(
+                        "Best profit pool",
+                        profit_row,
+                        "This group contributes the strongest total risk-adjusted profit.",
+                        "#16a34a",
+                    ),
+                    segment_card(
+                        "Best test pool",
+                        test_row,
+                        "This group has meaningful test-ready customer volume.",
+                        "#7c3aed",
+                    ),
+                    segment_card(
+                        "Highest risk group",
+                        risk_row,
+                        "This group needs guardrail attention before aggressive growth.",
+                        "#dc2626",
+                    ),
+                ],
+                style={"display": "grid", "gridTemplateColumns": "repeat(4, minmax(0, 1fr))", "gap": "14px", "marginTop": "16px"},
+            ),
+        ]
+    )
+
+
+@app.callback(
     Output("priority-segment-table-container", "children"),
     Input("active-customer-data-store", "data"),
 )
 def update_priority_segment_table(active_data):
-    master_df = get_active_customer_features(active_data)
-    rows = build_priority_segment_rows_from_active_data(master_df)
+    df = get_active_customer_features(active_data).copy()
 
-    if not rows:
+    if df.empty or "customer_segment" not in df.columns:
         return create_zero_state_card(
-            "No segment table available",
-            "The active master dataset does not contain enough segment information.",
-            "Upload a valid customer file or return to the synthetic demo portfolio.",
+            "Segment Action Table unavailable",
+            "No segment field is available in the active dataset.",
+            "Upload a customer file with customer_segment or use the synthetic demo portfolio.",
+        )
+
+    total_customers = int(len(df))
+
+    def numeric_column(column):
+        if column not in df.columns:
+            return pd.Series([0] * total_customers)
+        return pd.to_numeric(df[column], errors="coerce").fillna(0)
+
+    df["_risk_adjusted_profit"] = numeric_column("risk_adjusted_profit")
+    df["_expected_roi"] = numeric_column("expected_roi")
+    df["_default_probability"] = numeric_column("default_probability")
+
+    if "decision_status" not in df.columns:
+        df["decision_status"] = "Do Not Launch"
+
+    df["_scale_flag"] = (df["decision_status"] == "Scale").astype(int)
+    df["_test_flag"] = (df["decision_status"] == "Test").astype(int)
+    df["_block_flag"] = (df["decision_status"] == "Block").astype(int)
+    df["_eligible_flag"] = df["decision_status"].isin(["Scale", "Test"]).astype(int)
+
+    summary = (
+        df.groupby("customer_segment", as_index=False)
+        .agg(
+            customer_count=("customer_segment", "size"),
+            avg_profit=("_risk_adjusted_profit", "mean"),
+            total_profit=("_risk_adjusted_profit", "sum"),
+            avg_roi=("_expected_roi", "mean"),
+            avg_default=("_default_probability", "mean"),
+            scale_count=("_scale_flag", "sum"),
+            test_count=("_test_flag", "sum"),
+            block_count=("_block_flag", "sum"),
+            eligible_count=("_eligible_flag", "sum"),
+        )
+    )
+
+    if summary.empty:
+        return create_zero_state_card(
+            "No segment actions available",
+            "The active dataset did not return any segment records.",
+            "Clear filters or upload a broader customer file.",
+        )
+
+    summary["eligible_rate"] = summary["eligible_count"] / summary["customer_count"].replace(0, pd.NA)
+    summary["block_rate"] = summary["block_count"] / summary["customer_count"].replace(0, pd.NA)
+    summary["eligible_rate"] = summary["eligible_rate"].fillna(0)
+    summary["block_rate"] = summary["block_rate"].fillna(0)
+
+    segment_meanings = {
+        "Core Customer": "Everyday active customers with balanced value and manageable risk.",
+        "Loyal High-Value Customer": "Strong relationship customers with high engagement and spend.",
+        "Dormant but Recoverable": "Lower recent activity, but still worth reactivation.",
+        "Premium Growth Candidate": "Premium potential, but needs stronger economics or targeting.",
+        "High-Utilization Revolver": "Balance-carrying customers where risk controls matter.",
+        "Risk Watch": "High-risk customers who need protection or manual review.",
+        "Underused Low-Risk Customer": "Lower-risk customers with low usage and activation potential.",
+    }
+
+    def business_move(row):
+        if row["avg_default"] >= 0.08 or row["block_rate"] >= 0.10:
+            return "Protect / Review"
+        if row["avg_profit"] > 0 and row["eligible_rate"] >= 0.50:
+            return "Grow through campaign test"
+        if row["test_count"] > 0:
+            return "Controlled test"
+        return "Monitor"
+
+    def next_action(row):
+        move = business_move(row)
+        if move == "Protect / Review":
+            return "Do not send aggressive growth offers; review Guardrails first."
+        if move == "Grow through campaign test":
+            return "Compare campaigns, simulate economics, then export eligible audience."
+        if move == "Controlled test":
+            return "Use A/B Planner before scaling."
+        return "Monitor until value or eligibility improves."
+
+    summary["business_move"] = summary.apply(business_move, axis=1)
+    summary["next_action"] = summary.apply(next_action, axis=1)
+
+    move_rank = {
+        "Grow through campaign test": 1,
+        "Controlled test": 2,
+        "Monitor": 3,
+        "Protect / Review": 4,
+    }
+    summary["move_rank"] = summary["business_move"].map(move_rank).fillna(9)
+
+    summary = summary.sort_values(
+        ["move_rank", "total_profit", "eligible_count"],
+        ascending=[True, False, False],
+    )
+
+    rows = []
+    for _, row in summary.iterrows():
+        segment = str(row["customer_segment"])
+        rows.append(
+            {
+                "Customer Segment": segment,
+                "Plain-English Meaning": segment_meanings.get(segment, "Customer group based on value, risk, engagement, and usage signals."),
+                "Business Move": row["business_move"],
+                "Customers": f"{int(row['customer_count']):,}",
+                "Scale/Test Pool": f"{int(row['eligible_count']):,} ({float(row['eligible_rate']):.1%})",
+                "Risk": format_percent(float(row["avg_default"])),
+                "Avg Profit": format_currency(float(row["avg_profit"])),
+                "Next Action": row["next_action"],
+            }
         )
 
     return create_table(rows)
