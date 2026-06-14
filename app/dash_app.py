@@ -2966,7 +2966,7 @@ def build_customer_lookup_layout() -> html.Div:
         children=[
             create_tab_intro(
                 "Customer 360",
-                "Search the customer directory, select a customer, and review the profile, decision, risk band, recommended action, and explanation behind the engine output.",
+                "Search the customer directory, select a customer, and review the individual decision trace, risk drivers, recommended action, and explanation behind the engine output.",
             ),
             html.Div(
                 children=[
@@ -3115,7 +3115,7 @@ def build_customer_lookup_layout() -> html.Div:
                             html.Div(
                                 children=[
                                     html.Div(
-                                        "Synthetic data note",
+                                        "Data privacy note",
                                         style={
                                             "fontSize": "13px",
                                             "fontWeight": "900",
@@ -3126,7 +3126,7 @@ def build_customer_lookup_layout() -> html.Div:
                                         },
                                     ),
                                     html.P(
-                                        "Names, emails, phone numbers, and profile attributes are synthetic and used only to demonstrate how the decision engine could be inspected.",
+                                        "Directory details may come from the synthetic demo portfolio or an uploaded file. Use this view for decision review; avoid exposing customer contact fields in screenshots or public demos.",
                                         style={
                                             "margin": "0",
                                             "fontSize": "13px",
@@ -5813,7 +5813,7 @@ def update_customer_lookup(selected_rows, table_data, active_data):
                     html.Div(
                         children=[
                             html.Div(
-                                "Customer Decision Profile",
+                                "Customer Decision Trace",
                                 style={
                                     "fontSize": "13px",
                                     "fontWeight": "900",
@@ -5919,6 +5919,18 @@ def update_customer_lookup(selected_rows, table_data, active_data):
                         "#f97316",
                     ),
                     create_small_metric_card(
+                        "Utilization",
+                        f"{customer['utilization_rate'] * 100:.1f}%",
+                        "Balance pressure signal",
+                        "#0ea5e9",
+                    ),
+                    create_small_metric_card(
+                        "Late Payments",
+                        f"{int(customer['late_payments_12m'])}",
+                        "Last 12 months",
+                        "#dc2626",
+                    ),
+                    create_small_metric_card(
                         "Recommended Action",
                         customer["recommended_action"],
                         "Next-best-action from engine",
@@ -5927,8 +5939,54 @@ def update_customer_lookup(selected_rows, table_data, active_data):
                 ],
                 style={
                     "display": "grid",
-                    "gridTemplateColumns": "repeat(4, minmax(0, 1fr))",
+                    "gridTemplateColumns": "repeat(auto-fit, minmax(155px, 1fr))",
                     "gap": "12px",
+                    "marginBottom": "18px",
+                },
+            ),
+
+            html.Div(
+                children=[
+                    html.Div(
+                        "Decision trace",
+                        style={
+                            "fontSize": "13px",
+                            "fontWeight": "900",
+                            "textTransform": "uppercase",
+                            "letterSpacing": "0.08em",
+                            "color": "#1e3a8a",
+                            "marginBottom": "8px",
+                        },
+                    ),
+                    html.Div(
+                        f"{customer['decision_status']} because the customer is a {customer['customer_segment']} in the {customer['risk_band']} risk band, "
+                        f"with {customer['default_probability'] * 100:.2f}% default probability, {customer['utilization_rate'] * 100:.1f}% utilization, "
+                        f"{int(customer['late_payments_12m'])} late payment(s), {customer['expected_roi']:.1f}x expected ROI, "
+                        f"and {format_currency(customer['risk_adjusted_profit'])} risk-adjusted profit.",
+                        style={
+                            "fontSize": "14px",
+                            "lineHeight": "1.5",
+                            "color": "#1e3a8a",
+                            "marginBottom": "8px",
+                        },
+                    ),
+                    html.Div(
+                        children=[
+                            html.Strong("Analyst next step: "),
+                            customer["recommended_action"],
+                        ],
+                        style={
+                            "fontSize": "14px",
+                            "lineHeight": "1.5",
+                            "color": COLORS["text"],
+                        },
+                    ),
+                ],
+                style={
+                    "backgroundColor": "#eff6ff",
+                    "border": "1px solid #bfdbfe",
+                    "borderRadius": "16px",
+                    "padding": "14px",
                     "marginBottom": "18px",
                 },
             ),
@@ -5938,7 +5996,7 @@ def update_customer_lookup(selected_rows, table_data, active_data):
                     html.Div(
                         children=[
                             html.H3(
-                                "Customer Profile",
+                                "Profile & Account Context",
                                 style={
                                     "margin": "0 0 12px 0",
                                     "fontSize": "18px",
@@ -5959,7 +6017,7 @@ def update_customer_lookup(selected_rows, table_data, active_data):
                     html.Div(
                         children=[
                             html.H3(
-                                "Why This Decision?",
+                                "Why this decision?",
                                 style={
                                     "margin": "0 0 12px 0",
                                     "fontSize": "18px",
