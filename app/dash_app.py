@@ -4680,7 +4680,7 @@ app.layout = html.Div(
                     children=[
                         create_tab_intro(
                             "Portfolio Overview",
-                            "Start here for the executive view of the portfolio. This page shows how many customers are ready to scale, how many should be tested, and how many should be held back or blocked before any campaign rollout.",
+                            "Start here for the executive view of the active portfolio. This page summarizes rollout readiness, decision mix, and the recommended path from portfolio review to campaign launch.",
                         ),
                         html.Div(
                             children=[
@@ -4689,9 +4689,46 @@ app.layout = html.Div(
                             ],
                             style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "18px", "marginTop": "22px"},
                         ),
-                        create_insight_card(
-                            "Executive Takeaway",
-                            "The engine avoids a simple campaign-blast approach. It separates customers into launch-ready, test-worthy, not-ready, and blocked groups so growth decisions are tied to risk-adjusted economics.",
+                        html.Div(
+                            id="overview-executive-takeaway",
+                            children=create_insight_card(
+                                "Executive Takeaway",
+                                "The engine avoids a simple campaign-blast approach. It separates customers into launch-ready, test-worthy, not-ready, and blocked groups so growth decisions are tied to risk-adjusted economics.",
+                            ),
+                            style={"marginTop": "18px"},
+                        ),
+                        html.Div(
+                            children=[
+                                html.H3(
+                                    "Recommended next path",
+                                    style={"margin": "0 0 8px 0", "fontSize": "20px", "fontWeight": "900"},
+                                ),
+                                html.P(
+                                    "Use this sequence to move from portfolio readout to controlled campaign execution.",
+                                    style={"margin": "0 0 14px 0", "color": COLORS["muted"], "lineHeight": "1.45"},
+                                ),
+                                html.Div(
+                                    children=[
+                                        html.Div([html.Strong("1. Review segments"), html.Div("Open Segment Strategy to see which groups drive opportunity and risk.", style={"color": COLORS["muted"], "fontSize": "13px", "marginTop": "5px"})]),
+                                        html.Div([html.Strong("2. Choose campaign"), html.Div("Use Campaigns & Offers to compare ranked campaign opportunities.", style={"color": COLORS["muted"], "fontSize": "13px", "marginTop": "5px"})]),
+                                        html.Div([html.Strong("3. Simulate and test"), html.Div("Validate cost, lift, ROI, and test design before broad rollout.", style={"color": COLORS["muted"], "fontSize": "13px", "marginTop": "5px"})]),
+                                        html.Div([html.Strong("4. Export and review"), html.Div("Use Audience Explorer and Guardrails before launch execution.", style={"color": COLORS["muted"], "fontSize": "13px", "marginTop": "5px"})]),
+                                    ],
+                                    style={
+                                        "display": "grid",
+                                        "gridTemplateColumns": "repeat(4, minmax(0, 1fr))",
+                                        "gap": "12px",
+                                    },
+                                ),
+                            ],
+                            style={
+                                "backgroundColor": COLORS["card"],
+                                "border": f"1px solid {COLORS['border']}",
+                                "borderRadius": "18px",
+                                "padding": "20px",
+                                "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                                "marginTop": "18px",
+                            },
                         ),
                     ],
                 ),
@@ -5413,6 +5450,7 @@ def download_schema_excel(n_clicks):
     Output("guardrail-risk-chart", "figure"),
     Output("guardrail-high-util-chart", "figure"),
     Output("guardrail-blocked-segment-chart", "figure"),
+    Output("overview-executive-takeaway", "children"),
     Input("filter-segment", "value"),
     Input("filter-decision", "value"),
     Input("filter-risk", "value"),
@@ -5676,6 +5714,49 @@ def update_filtered_charts(selected_segments, selected_decisions, selected_risks
         fig.update_layout(showlegend=False, xaxis_title="Blocked Customer Count", yaxis_title="")
         return polish(fig, "Blocked Customers by Segment")
 
+    def overview_takeaway(df):
+        if df.empty:
+            return create_insight_card(
+                "Executive Takeaway",
+                "No customers match the active filters. Clear filters or upload a broader customer file to review portfolio readiness.",
+                variant="warning",
+            )
+
+        total_customers = int(len(df))
+
+        if "decision_status" in df.columns:
+            decisions = df["decision_status"].fillna("Unknown").astype(str)
+        else:
+            decisions = pd.Series(["Unknown"] * total_customers)
+
+        scale_count = int((decisions == "Scale").sum())
+        test_count = int((decisions == "Test").sum())
+        block_count = int((decisions == "Block").sum())
+        do_not_launch_count = int((decisions == "Do Not Launch").sum())
+        eligible_count = scale_count + test_count
+
+        eligible_rate = eligible_count / total_customers if total_customers else 0
+        block_rate = block_count / total_customers if total_customers else 0
+
+        if block_rate >= 0.05:
+            guidance = "Guardrail review should happen before any broad campaign launch because the blocked population is material."
+            variant = "warning"
+        elif eligible_rate >= 0.50:
+            guidance = "The portfolio has a strong Scale/Test pool, so the next step is to prioritize segments, select campaigns, and validate economics."
+            variant = "success"
+        else:
+            guidance = "The portfolio is conservative from a rollout perspective; use testing and segment-level review before scaling campaigns."
+            variant = "info"
+
+        message = (
+            f"The active view contains {total_customers:,} customers: {scale_count:,} Scale, "
+            f"{test_count:,} Test, {do_not_launch_count:,} Do Not Launch, and {block_count:,} Block. "
+            f"{format_percent(eligible_rate)} are eligible for Scale/Test and {format_percent(block_rate)} are blocked. "
+            f"{guidance}"
+        )
+
+        return create_insight_card("Executive Takeaway", message, variant=variant)
+
     figures = (
         decision_share_figure(filtered),
         decision_count_figure(filtered),
@@ -5689,7 +5770,8 @@ def update_filtered_charts(selected_segments, selected_decisions, selected_risks
         blocked_segment_figure(filtered),
     )
 
-    return tuple(apply_view_label_to_figure(fig, view_label) for fig in figures)
+    polished_figures = tuple(apply_view_label_to_figure(fig, view_label) for fig in figures)
+    return polished_figures + (overview_takeaway(filtered),)
 
 
 
