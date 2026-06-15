@@ -4967,45 +4967,482 @@ def create_campaign_audience_workbench_shell() -> html.Div:
 def create_hub_utility_page(view):
     view = view or "how"
 
+    def utility_card(title, body, eyebrow=None, accent="blue"):
+        return html.Div(
+            className=f"utility-product-card-v3 utility-accent-{accent}-v3",
+            children=[
+                html.Div(eyebrow, className="utility-card-eyebrow-v3") if eyebrow else None,
+                html.H4(title, className="utility-card-title-v3"),
+                html.Div(body, className="utility-card-body-v3"),
+            ],
+        )
+
+    def metric_chip(label, value, note, accent="blue"):
+        return html.Div(
+            className=f"utility-metric-chip-v3 utility-accent-{accent}-v3",
+            children=[
+                html.Div(label, className="utility-metric-label-v3"),
+                html.Div(value, className="utility-metric-value-v3"),
+                html.Div(note, className="utility-metric-note-v3"),
+            ],
+        )
+
+    def utility_flow_animation():
+        return html.Div(
+            className="utility-flow-theater-v3",
+            children=[
+                html.Div(className="flow-orb flow-orb-one"),
+                html.Div(className="flow-orb flow-orb-two"),
+                html.Div(className="flow-orb flow-orb-three"),
+                html.Div(
+                    className="flow-engine-core-v3",
+                    children=[
+                        html.Div("DECISION ENGINE", className="flow-engine-eyebrow-v3"),
+                        html.Div("Risk + Value + Guardrails", className="flow-engine-title-v3"),
+                        html.Div("turn customer signals into launch decisions", className="flow-engine-subtitle-v3"),
+                    ],
+                ),
+
+                html.Div(
+                    id="flow-live-console-content-v3",
+                    className="flow-live-console-v3",
+                    children=[
+                        html.Div("LIVE DEMO PREVIEW", className="flow-live-eyebrow-v3"),
+                        html.Div(
+                            className="flow-live-row-v3",
+                            children=[
+                                html.Span("Portfolio"),
+                                html.Strong("10,000 customers"),
+                            ],
+                        ),
+                        html.Div(
+                            className="flow-live-row-v3",
+                            children=[
+                                html.Span("Engine status"),
+                                html.Strong("Scoring risk + value"),
+                            ],
+                        ),
+                        html.Div(
+                            className="flow-live-row-v3",
+                            children=[
+                                html.Span("Decision output"),
+                                html.Strong("Scale / Test / Block"),
+                            ],
+                        ),
+                        html.Div(className="flow-live-bars-v3", children=[
+                            html.Div(className="flow-live-bar-one-v3"),
+                            html.Div(className="flow-live-bar-two-v3"),
+                            html.Div(className="flow-live-bar-three-v3"),
+                        ]),
+                    ],
+                ),
+                html.Div("Upload a file, watch each stage update, then download the ready launch list", className="flow-interaction-hint-v3"),
+
+                html.Div(
+                    className="flow-output-stack-v3",
+                    children=[
+                        html.Div("OUTPUT", className="flow-output-eyebrow-v3"),
+                        html.Div("Scale", className="flow-output-chip-v3 flow-output-scale-v3"),
+                        html.Div("Test", className="flow-output-chip-v3 flow-output-test-v3"),
+                        html.Div("Block", className="flow-output-chip-v3 flow-output-block-v3"),
+                    ],
+                ),
+
+                html.Div(className="flow-scan-beam-v3"),
+
+                html.Div(
+                    className="flow-lane-v3",
+                    children=[
+                        dcc.Upload(
+                            id="flow-step-upload",
+                            multiple=False,
+                            className="flow-upload-wrapper-v3",
+                            children=html.Div(
+                                id="flow-node-upload-content-v3",
+                                children=[
+                                    html.Span("01"),
+                                    html.Strong("Upload"),
+                                    html.Small("Click to load CSV/XLSX"),
+                                ],
+                                className="flow-node-v3 flow-node-one flow-node-upload-v3",
+                                tabIndex=0,
+                                **{"data-message": "Bring in a customer-level CSV or Excel file."},
+                            ),
+                        ),
+                        html.Div(id="flow-node-score-content-v3", children=[html.Span("02"), html.Strong("Score"), html.Small("Risk + profit")], className="flow-node-v3 flow-node-two", tabIndex=0, **{"data-message": "Calculate risk, value, profitability, and customer signals."}),
+                        html.Div(id="flow-node-segment-content-v3", children=[html.Span("03"), html.Strong("Segment"), html.Small("Audience logic")], className="flow-node-v3 flow-node-three", tabIndex=0, **{"data-message": "Group customers by behavior, value, risk, and growth potential."}),
+                        html.Div(id="flow-node-campaign-content-v3", children=[html.Span("04"), html.Strong("Campaign"), html.Small("Offer match")], className="flow-node-v3 flow-node-four", tabIndex=0, **{"data-message": "Match the right campaign to the right customer audience."}),
+                        html.Div(id="flow-node-test-content-v3", children=[html.Span("05"), html.Strong("Test"), html.Small("Scenario + A/B")], className="flow-node-v3 flow-node-five", tabIndex=0, **{"data-message": "Simulate cost, lift, profit, risk, and controlled experiment design."}),
+                        html.Div(id="flow-node-guardrail-content-v3", children=[html.Span("06"), html.Strong("Guardrail"), html.Small("Risk review")], className="flow-node-v3 flow-node-six", tabIndex=0, **{"data-message": "Protect risky or sensitive customers before launch."}),
+                        html.Div(id="flow-node-export-content-v3", children=[html.Span("07"), html.Strong("Export"), html.Small("Launch list")], className="flow-node-v3 flow-node-seven", tabIndex=0, **{"data-message": "Download the final audience after strategy and guardrail review."}),
+                    ],
+                ),
+                html.Div(className="flow-signal-dot-v3 flow-signal-one-v3"),
+                html.Div(className="flow-signal-dot-v3 flow-signal-two-v3"),
+                html.Div(className="flow-signal-dot-v3 flow-signal-three-v3"),
+                html.Div(className="flow-glow-line-v3"),
+            ],
+        )
+
     if view == "guide":
         eyebrow = "DECISION LANGUAGE"
         title = "Dashboard Guide"
         body = html.Div(
+            className="utility-page-grid-v3",
             children=[
-                html.Div([html.Strong("Scale"), html.Div("Ready for broader rollout when value and risk are acceptable.", style={"color": "#64748b", "fontSize": "13px"})]),
-                html.Div([html.Strong("Test"), html.Div("Run a controlled experiment before scaling.", style={"color": "#64748b", "fontSize": "13px"})]),
-                html.Div([html.Strong("Do Not Launch"), html.Div("Not enough upside or not a strong campaign fit.", style={"color": "#64748b", "fontSize": "13px"})]),
-                html.Div([html.Strong("Block"), html.Div("Do not target because risk or guardrail rules are triggered.", style={"color": "#64748b", "fontSize": "13px"})]),
+                html.Div(
+                    className="utility-page-hero-v3",
+                    children=[
+                        html.Div("How to read the engine", className="utility-section-kicker-v3"),
+                        html.H3("The dashboard converts portfolio signals into launch decisions.", className="utility-section-title-v3"),
+                        html.P(
+                            "Use this guide when you need to explain what Scale, Test, Do Not Launch, and Block mean in business language. The goal is not only to grow spend, but to grow responsibly with risk controls visible before launch.",
+                            className="utility-section-copy-v3",
+                        ),
+                    ],
+                ),
+                html.Div(
+                    className="utility-four-grid-v3",
+                    children=[
+                        utility_card("Scale", "Ready for broader rollout because economics look positive and risk stays within acceptable limits.", "Launch decision", "green"),
+                        utility_card("Test", "Promising enough to learn, but not strong enough for full rollout. Use A/B testing before scaling.", "Launch decision", "blue"),
+                        utility_card("Do Not Launch", "The campaign does not show enough value, fit, or confidence for the selected audience.", "Launch decision", "gray"),
+                        utility_card("Block", "The customer or group should not be targeted because risk, utilization, or guardrail rules are triggered.", "Launch decision", "red"),
+                    ],
+                ),
+                html.Div(
+                    className="utility-two-grid-v3",
+                    children=[
+                        html.Div(
+                            className="utility-panel-v3",
+                            children=[
+                                html.Div("Core metrics", className="utility-section-kicker-v3"),
+                                html.H3("What the top KPIs mean", className="utility-section-title-v3"),
+                                html.Div(
+                                    className="utility-metric-grid-v3",
+                                    children=[
+                                        metric_chip("Filtered Customers", "Audience size", "How many customers match the current filters.", "blue"),
+                                        metric_chip("Monthly Spend", "Portfolio value", "Existing monthly spend for the filtered group.", "cyan"),
+                                        metric_chip("Risk-Adjusted Profit", "Profit after risk", "Estimated profit after expected credit loss.", "green"),
+                                        metric_chip("Scale/Test Rate", "Eligible share", "Customers that can be scaled or tested.", "purple"),
+                                        metric_chip("Block Rate", "Protected share", "Customers removed because of guardrails.", "red"),
+                                    ],
+                                ),
+                            ],
+                        ),
+                        html.Div(
+                            className="utility-panel-v3",
+                            children=[
+                                html.Div("Risk controls", className="utility-section-kicker-v3"),
+                                html.H3("How guardrails should be interpreted", className="utility-section-title-v3"),
+                                html.Div(
+                                    className="utility-rule-list-v3",
+                                    children=[
+                                        html.Div([html.Strong("High default probability"), html.Span(" Flags customers with elevated credit-loss risk.")]),
+                                        html.Div([html.Strong("High utilization"), html.Span(" Avoids pushing more spend to already stretched customers.")]),
+                                        html.Div([html.Strong("Recent late payments"), html.Span(" Protects customers showing repayment stress.")]),
+                                        html.Div([html.Strong("Low economics"), html.Span(" Blocks campaigns where expected value does not justify cost or risk.")]),
+                                    ],
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+                html.Div(
+                    className="utility-panel-v3",
+                    children=[
+                        html.Div("How to present this project", className="utility-section-kicker-v3"),
+                        html.H3("Interview-ready explanation", className="utility-section-title-v3"),
+                        html.P(
+                            "This is a risk-aware campaign decision product. It does not simply rank customers by revenue potential. It combines spend behavior, profitability, risk signals, segment fit, and responsible-lending guardrails to decide whether a campaign should scale, be tested, not launch, or be blocked.",
+                            className="utility-section-copy-v3",
+                        ),
+                    ],
+                ),
             ],
-            style={"display": "grid", "gridTemplateColumns": "repeat(4, minmax(0, 1fr))", "gap": "12px"},
         )
+
     elif view == "voice":
         eyebrow = "ACCESSIBILITY LAYER"
         title = "Voice Guide"
-        body = html.P(
-            "Planned voice layer: explain pages, read KPIs, and translate decisions into simple language for accessibility.",
-            style={"margin": "0", "color": "#475569", "lineHeight": "1.55"},
+        body = html.Div(
+            className="utility-page-grid-v3",
+            children=[
+                html.Div(
+                    className="utility-page-hero-v3",
+                    children=[
+                        html.Div("Planned product layer", className="utility-section-kicker-v3"),
+                        html.H3("Voice support for non-technical business users.", className="utility-section-title-v3"),
+                        html.P(
+                            "This page represents a future guided narration layer. The purpose is to make the dashboard easier to use for executives, operators, and accessibility-focused users who want plain-English explanations.",
+                            className="utility-section-copy-v3",
+                        ),
+                    ],
+                ),
+                html.Div(
+                    className="utility-three-grid-v3",
+                    children=[
+                        utility_card("Page narration", "Explain what the current page is used for and what decision it supports.", "Voice feature", "blue"),
+                        utility_card("KPI narration", "Read the active audience size, profit, risk, Scale/Test rate, and Block rate.", "Voice feature", "green"),
+                        utility_card("Decision narration", "Explain why the recommendation is Scale, Test, Do Not Launch, or Block.", "Voice feature", "purple"),
+                    ],
+                ),
+                html.Div(
+                    className="utility-panel-v3",
+                    children=[
+                        html.Div("Future state", className="utility-section-kicker-v3"),
+                        html.H3("Example voice prompts", className="utility-section-title-v3"),
+                        html.Div(
+                            className="utility-prompt-list-v3",
+                            children=[
+                                html.Div("Explain this page in simple words."),
+                                html.Div("Why is this audience blocked?"),
+                                html.Div("Which segment should I test first?"),
+                                html.Div("Read the current launch recommendation."),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
         )
+
     elif view == "profile":
         eyebrow = "USER CONTROLS"
         title = "Profile & Session"
-        body = html.P(
-            "Future profile area for role, saved preferences, upload state, tour progress, and accessibility settings.",
-            style={"margin": "0", "color": "#475569", "lineHeight": "1.55"},
+        body = html.Div(
+            className="utility-page-grid-v3",
+            children=[
+                html.Div(
+                    className="utility-page-hero-v3",
+                    children=[
+                        html.Div("Session settings", className="utility-section-kicker-v3"),
+                        html.H3("A future control area for user preferences and data state.", className="utility-section-title-v3"),
+                        html.P(
+                            "This page is intentionally positioned as a product placeholder. In a real enterprise version, this would manage role-based views, data source history, export permissions, and accessibility preferences.",
+                            className="utility-section-copy-v3",
+                        ),
+                    ],
+                ),
+                html.Div(
+                    className="utility-three-grid-v3",
+                    children=[
+                        utility_card("Role", "Business analyst / portfolio strategy user.", "Current session", "blue"),
+                        utility_card("Data mode", "Synthetic demo portfolio until a valid file is uploaded.", "Current session", "green"),
+                        utility_card("Preferences", "Guided tour, voice mode, simplified explanations, and default filters.", "Future setting", "purple"),
+                    ],
+                ),
+                html.Div(
+                    className="utility-panel-v3",
+                    children=[
+                        html.Div("Enterprise version", className="utility-section-kicker-v3"),
+                        html.H3("What this could become", className="utility-section-title-v3"),
+                        html.Div(
+                            className="utility-rule-list-v3",
+                            children=[
+                                html.Div([html.Strong("Saved views"), html.Span(" Remember preferred filters and page layouts.")]),
+                                html.Div([html.Strong("Export history"), html.Span(" Track what audience was downloaded and when.")]),
+                                html.Div([html.Strong("Role permissions"), html.Span(" Restrict exports, guardrail overrides, and campaign launch actions.")]),
+                                html.Div([html.Strong("Accessibility"), html.Span(" Store voice, contrast, and simplified-language settings.")]),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
         )
+
     else:
         eyebrow = "PRODUCT WALKTHROUGH"
         title = "How the Dashboard Works"
         body = html.Div(
+            className="utility-page-grid-v3",
             children=[
-                html.Div([html.Div("1", className="utility-step-number-v3"), html.Strong("Review portfolio"), html.Div("Check customers, eligibility, risk, profit, and decision mix.", style={"color": "#64748b", "fontSize": "13px"})]),
-                html.Div([html.Div("2", className="utility-step-number-v3"), html.Strong("Choose segment"), html.Div("Find which customer groups deserve attention first.", style={"color": "#64748b", "fontSize": "13px"})]),
-                html.Div([html.Div("3", className="utility-step-number-v3"), html.Strong("Pick campaign"), html.Div("Compare ranked campaign opportunities.", style={"color": "#64748b", "fontSize": "13px"})]),
-                html.Div([html.Div("4", className="utility-step-number-v3"), html.Strong("Simulate"), html.Div("Test cost, lift, risk, and profit assumptions.", style={"color": "#64748b", "fontSize": "13px"})]),
-                html.Div([html.Div("5", className="utility-step-number-v3"), html.Strong("Design test"), html.Div("Split control and treatment before scaling.", style={"color": "#64748b", "fontSize": "13px"})]),
-                html.Div([html.Div("6", className="utility-step-number-v3"), html.Strong("Export + guardrail"), html.Div("Export audience only after risk review.", style={"color": "#64748b", "fontSize": "13px"})]),
+                html.Div(
+                    className="utility-page-hero-v3",
+                    children=[
+                        html.Div("Product flow", className="utility-section-kicker-v3"),
+                        html.H3("From customer data to responsible campaign launch.", className="utility-section-title-v3"),
+                        html.P(
+                            "This dashboard is designed like a credit card growth decision hub. It starts with a customer portfolio, applies risk and profitability logic, recommends a launch path, and gives analysts the tools to simulate, test, export, and govern the campaign.",
+                            className="utility-section-copy-v3",
+                        ),
+                        html.Div(
+                            className="utility-hero-actions-v3",
+                            children=[
+                                html.Button(
+                                    "Start with my data",
+                                    id={"type": "utility-route-button", "target": "upload"},
+                                    n_clicks=0,
+                                    className="utility-primary-action-v3",
+                                ),
+                                html.Span("Start the same flow with your own customer file, then return to the dashboard with refreshed scores.", className="utility-action-note-v3"),
+                            ],
+                        ),
+                    ],
+                ),
+                utility_flow_animation(),
+
+                html.Div(id="flow-upload-result-v3", className="flow-upload-result-v3"),
+
+                dcc.Download(id="flow-export-download-v3"),
+
+                html.Div(
+                    className="utility-insight-lab-v3",
+                    children=[
+                        html.Div(
+                            className="utility-insight-header-v3",
+                            children=[
+                                html.Div("BEHIND THE ENGINE", className="utility-section-kicker-v3"),
+                                html.H3("What happens after each signal moves through the flow", className="utility-section-title-v3"),
+                                html.P(
+                                    "The animation shows the path. These cards explain the actual business logic behind it: what data is checked, what the engine calculates, what the analyst controls, and how guardrails protect the final launch.",
+                                    className="utility-section-copy-v3",
+                                ),
+                            ],
+                        ),
+                        html.Details(
+                            open=True,
+                            className="utility-insight-card-v3",
+                            children=[
+                                html.Summary("1. Data enters the engine"),
+                                html.Div(
+                                    className="utility-insight-body-v3",
+                                    children=[
+                                        html.P("The upload layer checks whether the file has the minimum fields needed to score customers: customer ID, income, credit score, credit limit, balance, spend, transactions, tenure, late payments, and revolving balance."),
+                                        html.Div(
+                                            className="utility-insight-tags-v3",
+                                            children=[
+                                                html.Span("CSV / Excel"),
+                                                html.Span("Schema check"),
+                                                html.Span("Active portfolio"),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                        html.Details(
+                            className="utility-insight-card-v3",
+                            children=[
+                                html.Summary("2. The engine creates customer intelligence"),
+                                html.Div(
+                                    className="utility-insight-body-v3",
+                                    children=[
+                                        html.P("The scoring layer turns raw customer fields into business signals: risk band, segment, expected credit loss, risk-adjusted profit, campaign eligibility, recommended action, and decision status."),
+                                        html.Div(
+                                            className="utility-insight-tags-v3",
+                                            children=[
+                                                html.Span("Risk"),
+                                                html.Span("Value"),
+                                                html.Button("Segment", id={"type": "utility-route-button", "target": "tab-segment"}, n_clicks=0, className="utility-route-button-v3"),
+                                                html.Span("Decision status"),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                        html.Details(
+                            className="utility-insight-card-v3",
+                            children=[
+                                html.Summary("3. The analyst controls the launch path"),
+                                html.Div(
+                                    className="utility-insight-body-v3",
+                                    children=[
+                                        html.P("The dashboard is not only reporting. It lets the analyst choose the audience, compare campaign options, test assumptions in the simulator, design an A/B test, and inspect the exact customers before export."),
+                                        html.Div(
+                                            className="utility-insight-tags-v3",
+                                            children=[
+                                                html.Span("Filters"),
+                                                html.Span("Campaign choice"),
+                                                html.Span("Scenario lab"),
+                                                html.Span("A/B planner"),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                        html.Details(
+                            className="utility-insight-card-v3",
+                            children=[
+                                html.Summary("4. Guardrails decide what should not launch"),
+                                html.Div(
+                                    className="utility-insight-body-v3",
+                                    children=[
+                                        html.P("Before any audience is exported, the guardrail layer protects risky or sensitive customers. This keeps the product focused on responsible growth, not just maximum short-term spend."),
+                                        html.Div(
+                                            className="utility-insight-tags-v3",
+                                            children=[
+                                                html.Span("Block rules"),
+                                                html.Span("High utilization"),
+                                                html.Span("Late payments"),
+                                                html.Span("Responsible lending"),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+                html.Div(
+                    className="utility-two-grid-v3",
+                    children=[
+                        html.Div(
+                            className="utility-panel-v3",
+                            children=[
+                                html.Div("Dashboard pages", className="utility-section-kicker-v3"),
+                                html.H3("What each main tab is for", className="utility-section-title-v3"),
+                                html.Div(
+                                    className="utility-rule-list-v3",
+                                    children=[
+                                        html.Button([html.Strong("Overview"), html.Span("Executive view of portfolio readiness and decision mix."), html.Em("Open")], id={"type": "utility-route-button", "target": "tab-overview"}, n_clicks=0, className="utility-page-row-button-v3"),
+                                        html.Button([html.Strong("Segment Strategy"), html.Span("Identify best growth, test, and risk-control groups."), html.Em("Open")], id={"type": "utility-route-button", "target": "tab-segment"}, n_clicks=0, className="utility-page-row-button-v3"),
+                                        html.Button([html.Strong("Campaigns & Offers"), html.Span("Compare campaign recommendations and matched audiences."), html.Em("Open")], id={"type": "utility-route-button", "target": "tab-campaign"}, n_clicks=0, className="utility-page-row-button-v3"),
+                                        html.Button([html.Strong("Strategy Playbook"), html.Span("Convert findings into business actions."), html.Em("Open")], id={"type": "utility-route-button", "target": "tab-playbook"}, n_clicks=0, className="utility-page-row-button-v3"),
+                                        html.Button([html.Strong("Decision Workbench"), html.Span("Customer 360, scenario simulation, A/B planning, and audience review."), html.Em("Open")], id={"type": "utility-route-button", "target": "tab-workbench"}, n_clicks=0, className="utility-page-row-button-v3"),
+                                        html.Button([html.Strong("Guardrails"), html.Span("Responsible-lending review before launch."), html.Em("Open")], id={"type": "utility-route-button", "target": "tab-guardrails"}, n_clicks=0, className="utility-page-row-button-v3"),
+                                    ],
+                                ),
+                            ],
+                        ),
+                        html.Div(
+                            className="utility-panel-v3",
+                            children=[
+                                html.Div("Best user path", className="utility-section-kicker-v3"),
+                                html.H3("Recommended workflow", className="utility-section-title-v3"),
+                                html.P(
+                                    "Start in Overview, inspect Segment Strategy, choose a campaign, use Decision Workbench to simulate and design the test, then review Guardrails before exporting the final customer list.",
+                                    className="utility-section-copy-v3",
+                                ),
+                                html.Div(
+                                    className="utility-route-strip-v3",
+                                    children=[
+                                        html.Button("Overview", id={"type": "utility-route-button", "target": "tab-overview"}, n_clicks=0, className="utility-route-button-v3"),
+                                        html.Button("Segment", id={"type": "utility-route-button", "target": "tab-segment"}, n_clicks=0, className="utility-route-button-v3"),
+                                        html.Button("Campaign", id={"type": "utility-route-button", "target": "tab-campaign"}, n_clicks=0, className="utility-route-button-v3"),
+                                        html.Button("Simulate", id={"type": "utility-route-button", "target": "tab-workbench-simulate"}, n_clicks=0, className="utility-route-button-v3"),
+                                        html.Button("Test", id={"type": "utility-route-button", "target": "tab-workbench-test"}, n_clicks=0, className="utility-route-button-v3"),
+                                        html.Button("Guardrail", id={"type": "utility-route-button", "target": "tab-guardrails"}, n_clicks=0, className="utility-route-button-v3"),
+                                        html.Button("Export", id={"type": "utility-route-button", "target": "tab-workbench-export"}, n_clicks=0, className="utility-route-button-v3"),
+                                    ],
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+                html.Div(
+                    className="utility-panel-v3",
+                    children=[
+                        html.Div("Business value", className="utility-section-kicker-v3"),
+                        html.H3("Why this matters", className="utility-section-title-v3"),
+                        html.P(
+                            "A normal campaign dashboard shows performance after launch. This product helps decide what should launch before money is spent. That makes it more useful for business analysts, product managers, marketing strategy teams, and credit-risk partners.",
+                            className="utility-section-copy-v3",
+                        ),
+                    ],
+                ),
             ],
-            style={"display": "grid", "gridTemplateColumns": "repeat(6, minmax(0, 1fr))", "gap": "12px"},
         )
 
     return html.Details(
@@ -5081,6 +5518,7 @@ app.layout = html.Div(
                     ],
                 ),
                 create_data_source_center(),
+                html.Div(id="upload-ingestion-preview-v3", className="upload-ingestion-preview-v3"),
             ],
             id="hub-upload-static-container",
             className="hub-upload-static-container-v3 hidden-upload-dock-v3",
@@ -9027,6 +9465,632 @@ def download_ab_customer_list_excel(n_clicks, campaign_id, segment, audience_typ
 
 
 
+
+
+
+
+
+@app.callback(
+    Output("flow-export-download-v3", "data"),
+    Input({"type": "flow-export-ready-button", "scope": ALL}, "n_clicks"),
+    State("active-customer-data-store", "data"),
+    State("active-data-mode-store", "data"),
+    prevent_initial_call=True,
+)
+def download_flow_ready_launch_list(export_clicks, active_data, data_mode):
+    if not export_clicks or not any(export_clicks):
+        raise PreventUpdate
+
+    df = get_active_customer_features(active_data)
+    if df.empty:
+        raise PreventUpdate
+
+    ready_df = df.copy()
+    if "decision_status" in ready_df.columns:
+        ready_df = ready_df[ready_df["decision_status"].isin(["Scale", "Test"])].copy()
+
+    preferred_columns = [
+        "customer_id",
+        "email",
+        "customer_segment",
+        "risk_band",
+        "decision_status",
+        "recommended_action",
+        "campaign_recommendation",
+        "offer_type",
+        "monthly_spend",
+        "risk_adjusted_profit",
+        "default_probability",
+        "credit_score",
+        "credit_limit",
+        "current_balance",
+        "late_payments_12m",
+        "revolving_balance",
+    ]
+    export_columns = [col for col in preferred_columns if col in ready_df.columns]
+    if export_columns:
+        ready_df = ready_df[export_columns].copy()
+
+    mode = data_mode or {}
+    raw_name = str(mode.get("filename", "ready_launch_list")).rsplit(".", 1)[0]
+    safe_name = "".join(ch if ch.isalnum() or ch in ("_", "-") else "_" for ch in raw_name).strip("_") or "ready_launch_list"
+
+    return dcc.send_data_frame(
+        ready_df.to_csv,
+        f"{safe_name}_scale_test_ready_list.csv",
+        index=False,
+    )
+
+
+@app.callback(
+    Output("flow-node-upload-content-v3", "children"),
+    Output("flow-node-score-content-v3", "children"),
+    Output("flow-node-segment-content-v3", "children"),
+    Output("flow-node-campaign-content-v3", "children"),
+    Output("flow-node-test-content-v3", "children"),
+    Output("flow-node-guardrail-content-v3", "children"),
+    Output("flow-node-export-content-v3", "children"),
+    Input("flow-step-upload", "contents"),
+    State("flow-step-upload", "filename"),
+    prevent_initial_call=True,
+)
+def render_live_flow_node_outputs(contents, filename):
+    def node_children(number, title, subtitle, chips=None, export_button=False):
+        children = [
+            html.Span(number),
+            html.Strong(title),
+            html.Small(subtitle),
+        ]
+        if chips:
+            children.append(
+                html.Div(
+                    className="flow-node-mini-preview-v3",
+                    children=[
+                        html.Div(
+                            className=f"flow-node-preview-pill-v3 {chip.get('className', '')}",
+                            children=[
+                                html.Em(chip.get("label", "")),
+                                html.B(chip.get("value", "")),
+                            ],
+                        )
+                        for chip in chips
+                    ],
+                )
+            )
+        if export_button:
+            children.append(
+                html.Button(
+                    "Download ready list",
+                    id={"type": "flow-export-ready-button", "scope": "how-flow"},
+                    n_clicks=0,
+                    className="flow-node-export-button-v3",
+                )
+            )
+
+        return children
+
+    default_outputs = (
+        node_children("01", "Upload", "Click to load CSV/XLSX"),
+        node_children("02", "Score", "Risk + profit"),
+        node_children("03", "Segment", "Audience logic"),
+        node_children("04", "Campaign", "Offer match"),
+        node_children("05", "Test", "Scenario + A/B"),
+        node_children("06", "Guardrail", "Risk review"),
+        node_children("07", "Export", "Launch list"),
+    )
+
+    if not contents:
+        return default_outputs
+
+    try:
+        content_type, content_string = contents.split(",", 1)
+        decoded = base64.b64decode(content_string)
+        lower_filename = (filename or "").lower()
+
+        if lower_filename.endswith(".csv"):
+            uploaded_df = pd.read_csv(io.StringIO(decoded.decode("utf-8")))
+        elif lower_filename.endswith((".xlsx", ".xls")):
+            uploaded_df = pd.read_excel(io.BytesIO(decoded))
+        else:
+            return default_outputs
+
+        missing_required = [col for col in REQUIRED_UPLOAD_COLUMNS if col not in uploaded_df.columns]
+        if missing_required:
+            return (
+                node_children("01", "Upload", "Schema issue", [{"label": "Missing", "value": str(len(missing_required)), "className": "flow-node-pill-red-v3"}]),
+                node_children("02", "Score", "Waiting"),
+                node_children("03", "Segment", "Waiting"),
+                node_children("04", "Campaign", "Waiting"),
+                node_children("05", "Test", "Waiting"),
+                node_children("06", "Guardrail", "Waiting"),
+                node_children("07", "Export", "Waiting"),
+            )
+
+        scored_df = score_uploaded_customer_file(uploaded_df)
+        rows = int(len(scored_df))
+
+        decision_counts = (
+            scored_df["decision_status"].fillna("Unknown").astype(str).value_counts().to_dict()
+            if "decision_status" in scored_df.columns
+            else {}
+        )
+
+        segment_counts = (
+            scored_df["customer_segment"].fillna("Unknown").astype(str).value_counts().to_dict()
+            if "customer_segment" in scored_df.columns
+            else {}
+        )
+
+        action_counts = (
+            scored_df["recommended_action"].fillna("Unknown").astype(str).value_counts().to_dict()
+            if "recommended_action" in scored_df.columns
+            else {}
+        )
+
+        risk_counts = (
+            scored_df["risk_band"].fillna("Unknown").astype(str).value_counts().to_dict()
+            if "risk_band" in scored_df.columns
+            else {}
+        )
+
+        scale_count = int(decision_counts.get("Scale", 0))
+        test_count = int(decision_counts.get("Test", 0))
+        block_count = int(decision_counts.get("Block", 0))
+        do_not_launch_count = int(decision_counts.get("Do Not Launch", 0))
+
+        top_segment = max(segment_counts, key=segment_counts.get) if segment_counts else "Segment"
+        top_action = max(action_counts, key=action_counts.get) if action_counts else "Action"
+        top_risk = max(risk_counts, key=risk_counts.get) if risk_counts else "Risk"
+
+        total_profit_text = "N/A"
+        if "risk_adjusted_profit" in scored_df.columns:
+            total_profit = pd.to_numeric(scored_df["risk_adjusted_profit"], errors="coerce").fillna(0).sum()
+            total_profit_text = format_currency(total_profit)
+
+        avg_pd_text = top_risk
+        if "default_probability" in scored_df.columns:
+            avg_pd = pd.to_numeric(scored_df["default_probability"], errors="coerce").dropna()
+            if not avg_pd.empty:
+                avg_pd_value = float(avg_pd.mean())
+                avg_pd_text = format_percent(avg_pd_value) if avg_pd_value <= 1 else f"{avg_pd_value:.1f}%"
+
+        export_ready = scale_count + test_count
+
+        return (
+            node_children(
+                "01",
+                "Uploaded",
+                "File received",
+                [
+                    {"label": "Rows", "value": f"{rows:,}", "className": "flow-node-pill-blue-v3"},
+                    {"label": "File", "value": "XLSX" if lower_filename.endswith((".xlsx", ".xls")) else "CSV", "className": "flow-node-pill-green-v3"},
+                ],
+            ),
+            node_children(
+                "02",
+                "Scored",
+                "Risk + value",
+                [
+                    {"label": "Risk", "value": avg_pd_text, "className": "flow-node-pill-blue-v3"},
+                    {"label": "Profit", "value": total_profit_text, "className": "flow-node-pill-green-v3"},
+                ],
+            ),
+            node_children(
+                "03",
+                "Segmented",
+                "Top audience",
+                [
+                    {"label": "Top", "value": str(top_segment)[:18], "className": "flow-node-pill-purple-v3"},
+                    {"label": "Rows", "value": str(segment_counts.get(top_segment, rows)), "className": "flow-node-pill-blue-v3"},
+                ],
+            ),
+            node_children(
+                "04",
+                "Matched",
+                "Campaign fit",
+                [
+                    {"label": "Action", "value": str(top_action)[:18], "className": "flow-node-pill-green-v3"},
+                    {"label": "Count", "value": str(action_counts.get(top_action, rows)), "className": "flow-node-pill-blue-v3"},
+                ],
+            ),
+            node_children(
+                "05",
+                "Tested",
+                "Launch path",
+                [
+                    {"label": "Scale", "value": f"{scale_count:,}", "className": "flow-node-pill-green-v3"},
+                    {"label": "Test", "value": f"{test_count:,}", "className": "flow-node-pill-blue-v3"},
+                ],
+            ),
+            node_children(
+                "06",
+                "Guarded",
+                "Risk review",
+                [
+                    {"label": "Block", "value": f"{block_count:,}", "className": "flow-node-pill-red-v3"},
+                    {"label": "Hold", "value": f"{do_not_launch_count:,}", "className": "flow-node-pill-gray-v3"},
+                ],
+            ),
+            node_children(
+                "07",
+                "Ready",
+                "Export list",
+                [
+                    {"label": "Ready", "value": f"{export_ready:,}", "className": "flow-node-pill-green-v3"},
+                    {"label": "Rows", "value": f"{rows:,}", "className": "flow-node-pill-blue-v3"},
+                ],
+                export_button=True),
+        )
+
+    except Exception:
+        return default_outputs
+
+
+@app.callback(
+    Output("flow-live-console-content-v3", "children"),
+    Input("flow-step-upload", "contents"),
+    State("flow-step-upload", "filename"),
+    prevent_initial_call=True,
+)
+def render_flow_live_customer_snapshot(contents, filename):
+    if not contents:
+        raise PreventUpdate
+
+    try:
+        content_type, content_string = contents.split(",", 1)
+        decoded = base64.b64decode(content_string)
+        lower_filename = (filename or "").lower()
+
+        if lower_filename.endswith(".csv"):
+            uploaded_df = pd.read_csv(io.StringIO(decoded.decode("utf-8")))
+        elif lower_filename.endswith((".xlsx", ".xls")):
+            uploaded_df = pd.read_excel(io.BytesIO(decoded))
+        else:
+            return html.Div(
+                className="flow-snapshot-error-v3",
+                children=[
+                    html.Strong("Preview unavailable"),
+                    html.Span("Use CSV, XLSX, or XLS."),
+                ],
+            )
+
+        missing_required = [col for col in REQUIRED_UPLOAD_COLUMNS if col not in uploaded_df.columns]
+        if missing_required:
+            return html.Div(
+                className="flow-snapshot-error-v3",
+                children=[
+                    html.Strong("Schema check failed"),
+                    html.Span(f"Missing: {', '.join(missing_required[:4])}" + ("..." if len(missing_required) > 4 else "")),
+                ],
+            )
+
+        scored_df = score_uploaded_customer_file(uploaded_df)
+        rows = len(scored_df)
+
+        decision_counts = (
+            scored_df["decision_status"]
+            .fillna("Unknown")
+            .astype(str)
+            .value_counts()
+            .to_dict()
+            if "decision_status" in scored_df.columns
+            else {}
+        )
+
+        scale_count = int(decision_counts.get("Scale", 0))
+        test_count = int(decision_counts.get("Test", 0))
+        block_count = int(decision_counts.get("Block", 0))
+
+        preview_cols = [
+            "customer_id",
+            "customer_segment",
+            "risk_band",
+            "decision_status",
+            "recommended_action",
+            "monthly_spend",
+        ]
+        preview_cols = [col for col in preview_cols if col in scored_df.columns]
+        preview_df = scored_df[preview_cols].head(3).copy() if preview_cols else scored_df.head(3).copy()
+
+        customer_cards = []
+        for _, row in preview_df.iterrows():
+            customer_id = row.get("customer_id", "Customer")
+            segment = row.get("customer_segment", "Segment pending")
+            risk_band = row.get("risk_band", "Risk pending")
+            decision = row.get("decision_status", "Decision pending")
+            action = row.get("recommended_action", "Action pending")
+            spend = row.get("monthly_spend", None)
+
+            decision_class = str(decision).lower().replace(" ", "-")
+            spend_text = ""
+            if spend is not None:
+                try:
+                    spend_text = f" • {format_currency(float(spend))} spend"
+                except Exception:
+                    spend_text = ""
+
+            customer_cards.append(
+                html.Div(
+                    className=f"flow-mini-customer-v3 flow-mini-decision-{decision_class}-v3",
+                    children=[
+                        html.Div(str(customer_id), className="flow-mini-id-v3"),
+                        html.Strong(str(segment)),
+                        html.Small(f"{risk_band} • {decision}{spend_text}"),
+                        html.Div(str(action), className="flow-mini-action-v3"),
+                    ],
+                )
+            )
+
+        return html.Div(
+            className="flow-snapshot-content-v3",
+            children=[
+                html.Div(
+                    className="flow-snapshot-left-v3",
+                    children=[
+                        html.Div("LIVE UPLOADED SNAPSHOT", className="flow-snapshot-eyebrow-v3"),
+                        html.Strong(filename or "Uploaded file", className="flow-snapshot-file-v3"),
+                        html.Span("The animation is now showing the scored customer portfolio.", className="flow-snapshot-note-v3"),
+                    ],
+                ),
+                html.Div(
+                    className="flow-snapshot-kpis-v3",
+                    children=[
+                        html.Div([html.Span("Rows"), html.Strong(f"{rows:,}")]),
+                        html.Div([html.Span("Scale"), html.Strong(f"{scale_count:,}")]),
+                        html.Div([html.Button("Test", id={"type": "utility-route-button", "target": "tab-workbench-test"}, n_clicks=0, className="utility-route-button-v3"), html.Strong(f"{test_count:,}")]),
+                        html.Div([html.Span("Block"), html.Strong(f"{block_count:,}")]),
+                    ],
+                ),
+                html.Div(
+                    className="flow-snapshot-customers-v3",
+                    children=customer_cards,
+                ),
+            ],
+        )
+
+    except Exception as exc:
+        return html.Div(
+            className="flow-snapshot-error-v3",
+            children=[
+                html.Strong("Preview failed"),
+                html.Span(str(exc)),
+            ],
+        )
+
+
+@app.callback(
+    Output("flow-upload-result-v3", "children"),
+    Output("active-customer-data-store", "data", allow_duplicate=True),
+    Output("active-data-mode-store", "data", allow_duplicate=True),
+    Input("flow-step-upload", "contents"),
+    State("flow-step-upload", "filename"),
+    prevent_initial_call=True,
+)
+def process_flow_step_upload(contents, filename):
+    if not contents:
+        raise PreventUpdate
+
+    try:
+        content_type, content_string = contents.split(",", 1)
+        decoded = base64.b64decode(content_string)
+
+        lower_filename = (filename or "").lower()
+
+        if lower_filename.endswith(".csv"):
+            uploaded_df = pd.read_csv(io.StringIO(decoded.decode("utf-8")))
+        elif lower_filename.endswith((".xlsx", ".xls")):
+            uploaded_df = pd.read_excel(io.BytesIO(decoded))
+        else:
+            return (
+                html.Div(
+                    className="flow-upload-error-v3",
+                    children=[
+                        html.Strong("Unsupported file type"),
+                        html.Div("Upload CSV, XLSX, or XLS so the flow can score the portfolio."),
+                    ],
+                ),
+                no_update,
+                no_update,
+            )
+
+        uploaded_columns = list(uploaded_df.columns)
+        missing_required = [col for col in REQUIRED_UPLOAD_COLUMNS if col not in uploaded_columns]
+
+        if missing_required:
+            return (
+                html.Div(
+                    className="flow-upload-error-v3",
+                    children=[
+                        html.Strong("File received, but required columns are missing"),
+                        html.Div(f"Missing: {', '.join(missing_required[:8])}" + ("..." if len(missing_required) > 8 else "")),
+                        html.Div("Use the Upload Data page template if you want the exact schema."),
+                    ],
+                ),
+                no_update,
+                no_update,
+            )
+
+        scored_df = score_uploaded_customer_file(uploaded_df)
+        rows = int(len(scored_df))
+
+        decision_counts = {}
+        if "decision_status" in scored_df.columns:
+            decision_counts = scored_df["decision_status"].fillna("Unknown").astype(str).value_counts().to_dict()
+
+        scale_count = int(decision_counts.get("Scale", 0))
+        test_count = int(decision_counts.get("Test", 0))
+        block_count = int(decision_counts.get("Block", 0))
+
+        preview_cols = [
+            "customer_id",
+            "customer_segment",
+            "risk_band",
+            "decision_status",
+            "recommended_action",
+            "monthly_spend",
+            "risk_adjusted_profit",
+        ]
+        preview_cols = [col for col in preview_cols if col in scored_df.columns]
+        preview_df = scored_df[preview_cols].head(5).copy() if preview_cols else scored_df.head(5).copy()
+
+        table_header = html.Tr([html.Th(col.replace("_", " ").title()) for col in preview_df.columns])
+        table_rows = []
+        for _, row in preview_df.iterrows():
+            cells = []
+            for col in preview_df.columns:
+                value = row[col]
+                if isinstance(value, float):
+                    if "profit" in col or "spend" in col:
+                        value = format_currency(value)
+                    else:
+                        value = f"{value:.2f}"
+                cells.append(html.Td(str(value)))
+            table_rows.append(html.Tr(cells))
+
+        preview = html.Div(
+            className="flow-upload-success-v3",
+            children=[
+                html.Div(
+                    className="flow-upload-success-head-v3",
+                    children=[
+                        html.Div(
+                            children=[
+                                html.Div("FLOW UPLOAD COMPLETE", className="flow-upload-kicker-v3"),
+                                html.H3("Your file just moved through the decision engine", className="flow-upload-title-v3"),
+                                html.P(
+                                    f"{filename or 'Uploaded file'} was validated, scored, and set as the active master portfolio.",
+                                    className="flow-upload-copy-v3",
+                                ),
+                            ],
+                        ),
+                        html.Div("DASHBOARD REFRESHED", className="flow-upload-badge-v3"),
+                    ],
+                ),
+                html.Div(
+                    className="flow-upload-mini-kpis-v3",
+                    children=[
+                        html.Div([html.Span("Rows scored"), html.Strong(f"{rows:,}")]),
+                        html.Div([html.Span("Scale"), html.Strong(f"{scale_count:,}")]),
+                        html.Div([html.Button("Test", id={"type": "utility-route-button", "target": "tab-workbench-test"}, n_clicks=0, className="utility-route-button-v3"), html.Strong(f"{test_count:,}")]),
+                        html.Div([html.Span("Blocked"), html.Strong(f"{block_count:,}")]),
+                    ],
+                ),
+                html.Div(
+                    className="flow-upload-pipeline-v3",
+                    children=[
+                        html.Div([html.Span("1"), html.Strong("Received"), html.Small("File loaded from animation step")]),
+                        html.Div([html.Span("2"), html.Strong("Validated"), html.Small("Required schema passed")]),
+                        html.Div([html.Span("3"), html.Strong("Scored"), html.Small("Risk + value logic applied")]),
+                        html.Div([html.Span("4"), html.Strong("Activated"), html.Small("Dashboard now uses this data")]),
+                    ],
+                ),
+                html.Div(
+                    className="flow-upload-table-wrap-v3",
+                    children=[
+                        html.Div("Scored preview", className="flow-upload-table-title-v3"),
+                        html.Table([html.Thead(table_header), html.Tbody(table_rows)], className="flow-upload-table-v3"),
+                    ],
+                ),
+            ],
+        )
+
+        active_records = scored_df.to_dict("records")
+        active_mode = {
+            "mode": "uploaded",
+            "rows": rows,
+            "filename": filename or "uploaded_file",
+        }
+
+        return preview, active_records, active_mode
+
+    except Exception as exc:
+        return (
+            html.Div(
+                className="flow-upload-error-v3",
+                children=[
+                    html.Strong("The flow could not process this file"),
+                    html.Div(str(exc)),
+                ],
+            ),
+            no_update,
+            no_update,
+        )
+
+
+@app.callback(
+    Output("upload-ingestion-preview-v3", "children"),
+    Input("active-data-mode-store", "data"),
+    Input("active-customer-data-store", "data"),
+)
+def render_upload_ingestion_preview(data_mode, active_data):
+    data_mode = data_mode or {}
+    mode = data_mode.get("mode", "synthetic")
+    filename = data_mode.get("filename", "synthetic_demo_portfolio")
+    rows = data_mode.get("rows", 0)
+
+    try:
+        rows = int(rows or 0)
+    except (TypeError, ValueError):
+        rows = 0
+
+    if mode == "uploaded":
+        status_title = "Uploaded portfolio is active"
+        status_note = f"{filename} is now powering the dashboard."
+        badge_text = "LIVE UPLOADED DATA"
+        stage_one = "Schema validated"
+        stage_two = "Decision engine refreshed"
+        stage_three = "Dashboard ready"
+        pulse_class = "upload-preview-live-v3"
+    else:
+        status_title = "Waiting for customer file"
+        status_note = "The dashboard is currently using the synthetic demo portfolio."
+        badge_text = "SYNTHETIC DEMO MODE"
+        stage_one = "Upload file"
+        stage_two = "Validate schema"
+        stage_three = "Refresh dashboard"
+        pulse_class = "upload-preview-waiting-v3"
+
+    return html.Div(
+        className=f"upload-preview-card-v3 {pulse_class}",
+        children=[
+            html.Div(
+                className="upload-preview-head-v3",
+                children=[
+                    html.Div(
+                        children=[
+                            html.Div("UPLOAD PIPELINE PREVIEW", className="upload-preview-eyebrow-v3"),
+                            html.H3(status_title, className="upload-preview-title-v3"),
+                            html.P(status_note, className="upload-preview-copy-v3"),
+                        ],
+                    ),
+                    html.Div(
+                        className="upload-preview-badge-v3",
+                        children=badge_text,
+                    ),
+                ],
+            ),
+            html.Div(
+                className="upload-preview-stats-v3",
+                children=[
+                    html.Div([html.Span("File"), html.Strong(str(filename))]),
+                    html.Div([html.Span("Rows"), html.Strong(f"{rows:,}" if rows else "Demo")]),
+                    html.Div([html.Span("Mode"), html.Strong("Uploaded" if mode == "uploaded" else "Synthetic")]),
+                ],
+            ),
+            html.Div(
+                className="upload-preview-pipeline-v3",
+                children=[
+                    html.Div([html.Span("1"), html.Strong(stage_one), html.Small("Required fields checked")], className="upload-preview-step-v3"),
+                    html.Div([html.Span("2"), html.Strong(stage_two), html.Small("Risk, value, and campaign logic")], className="upload-preview-step-v3"),
+                    html.Div([html.Span("3"), html.Strong(stage_three), html.Small("All pages use active portfolio")], className="upload-preview-step-v3"),
+                    html.Div(className="upload-preview-moving-dot-v3"),
+                    html.Div(className="upload-preview-line-v3"),
+                ],
+            ),
+        ],
+    )
+
+
 @app.callback(
     Output("app-root", "className"),
     Output("hub-upload-static-container", "className"),
@@ -9044,10 +10108,19 @@ def download_ab_customer_list_excel(n_clicks, campaign_id, segment, audience_typ
     Input("hub-open-guide", "n_clicks"),
     Input("hub-open-voice", "n_clicks"),
     Input("hub-open-profile", "n_clicks"),
+    Input({"type": "utility-route-button", "target": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def route_top_utility(dashboard_clicks, upload_clicks, back_clicks, how_clicks, guide_clicks, voice_clicks, profile_clicks):
-    trigger = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else ""
+def route_top_utility(dashboard_clicks, upload_clicks, back_clicks, how_clicks, guide_clicks, voice_clicks, profile_clicks, utility_route_clicks):
+    trigger_raw = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else ""
+
+    trigger = trigger_raw
+    if trigger_raw.startswith("{"):
+        try:
+            trigger_payload = json.loads(trigger_raw)
+            trigger = f"utility-route-{trigger_payload.get('target')}"
+        except Exception:
+            trigger = trigger_raw
 
     base = "hub-top-link-v3 hub-top-button-v3"
     upload_base = "hub-top-link-v3 hub-top-link-primary-v3 hub-top-button-v3"
@@ -9060,7 +10133,7 @@ def route_top_utility(dashboard_clicks, upload_clicks, back_clicks, how_clicks, 
     voice_class = base
     profile_class = base
 
-    if trigger == "hub-open-upload":
+    if trigger in ("hub-open-upload", "utility-route-upload"):
         upload_class = upload_base + active
         return (
             "app-shell-v3 hub-upload-mode-v3",
@@ -9142,6 +10215,42 @@ def route_top_utility(dashboard_clicks, upload_clicks, back_clicks, how_clicks, 
         voice_class,
         profile_class,
     )
+
+
+
+@app.callback(
+    Output("main-tabs", "value", allow_duplicate=True),
+    Input({"type": "utility-route-button", "target": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def navigate_main_tabs_from_utility_page(route_clicks):
+    if not route_clicks or not any(route_clicks):
+        raise PreventUpdate
+
+    trigger_raw = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else ""
+
+    try:
+        trigger_payload = json.loads(trigger_raw)
+        target = trigger_payload.get("target")
+    except Exception:
+        raise PreventUpdate
+
+    target_to_tab = {
+        "tab-overview": "overview",
+        "tab-segment": "segment-strategy",
+        "tab-campaign": "campaigns-offers",
+        "tab-playbook": "strategy-playbook",
+        "tab-workbench": "decision-workbench",
+        "tab-workbench-simulate": "decision-workbench",
+        "tab-workbench-test": "decision-workbench",
+        "tab-workbench-export": "decision-workbench",
+        "tab-guardrails": "guardrails",
+    }
+
+    if target == "upload":
+        raise PreventUpdate
+
+    return target_to_tab.get(target, "overview")
 
 
 @app.callback(
