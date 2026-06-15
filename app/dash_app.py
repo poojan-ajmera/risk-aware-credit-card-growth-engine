@@ -2540,6 +2540,7 @@ def create_data_source_center() -> html.Details:
     ]
 
     return html.Details(
+        open=True,
         children=[
             html.Summary(
                 "Data Source & Schema Center",
@@ -2743,7 +2744,6 @@ def create_data_source_center() -> html.Details:
                 },
             ),
         ],
-        open=False,
         style={
             "backgroundColor": COLORS["card"],
             "border": f"1px solid {COLORS['border']}",
@@ -4789,7 +4789,7 @@ def build_customer_export_preview_rows(df: pd.DataFrame, limit: int = 25) -> lis
     return preview[preview_columns].to_dict("records")
 
 app = Dash(__name__, suppress_callback_exceptions=True)
-app.title = "Risk-Aware Credit Card Growth Decision Engine"
+app.title = "Credit Growth Decision Hub"
 
 tab_style = {
     "padding": "14px 18px",
@@ -4964,16 +4964,135 @@ def create_campaign_audience_workbench_shell() -> html.Div:
         },
     )
 
+def create_hub_utility_page(view):
+    view = view or "how"
+
+    if view == "guide":
+        eyebrow = "DECISION LANGUAGE"
+        title = "Dashboard Guide"
+        body = html.Div(
+            children=[
+                html.Div([html.Strong("Scale"), html.Div("Ready for broader rollout when value and risk are acceptable.", style={"color": "#64748b", "fontSize": "13px"})]),
+                html.Div([html.Strong("Test"), html.Div("Run a controlled experiment before scaling.", style={"color": "#64748b", "fontSize": "13px"})]),
+                html.Div([html.Strong("Do Not Launch"), html.Div("Not enough upside or not a strong campaign fit.", style={"color": "#64748b", "fontSize": "13px"})]),
+                html.Div([html.Strong("Block"), html.Div("Do not target because risk or guardrail rules are triggered.", style={"color": "#64748b", "fontSize": "13px"})]),
+            ],
+            style={"display": "grid", "gridTemplateColumns": "repeat(4, minmax(0, 1fr))", "gap": "12px"},
+        )
+    elif view == "voice":
+        eyebrow = "ACCESSIBILITY LAYER"
+        title = "Voice Guide"
+        body = html.P(
+            "Planned voice layer: explain pages, read KPIs, and translate decisions into simple language for accessibility.",
+            style={"margin": "0", "color": "#475569", "lineHeight": "1.55"},
+        )
+    elif view == "profile":
+        eyebrow = "USER CONTROLS"
+        title = "Profile & Session"
+        body = html.P(
+            "Future profile area for role, saved preferences, upload state, tour progress, and accessibility settings.",
+            style={"margin": "0", "color": "#475569", "lineHeight": "1.55"},
+        )
+    else:
+        eyebrow = "PRODUCT WALKTHROUGH"
+        title = "How the Dashboard Works"
+        body = html.Div(
+            children=[
+                html.Div([html.Div("1", className="utility-step-number-v3"), html.Strong("Review portfolio"), html.Div("Check customers, eligibility, risk, profit, and decision mix.", style={"color": "#64748b", "fontSize": "13px"})]),
+                html.Div([html.Div("2", className="utility-step-number-v3"), html.Strong("Choose segment"), html.Div("Find which customer groups deserve attention first.", style={"color": "#64748b", "fontSize": "13px"})]),
+                html.Div([html.Div("3", className="utility-step-number-v3"), html.Strong("Pick campaign"), html.Div("Compare ranked campaign opportunities.", style={"color": "#64748b", "fontSize": "13px"})]),
+                html.Div([html.Div("4", className="utility-step-number-v3"), html.Strong("Simulate"), html.Div("Test cost, lift, risk, and profit assumptions.", style={"color": "#64748b", "fontSize": "13px"})]),
+                html.Div([html.Div("5", className="utility-step-number-v3"), html.Strong("Design test"), html.Div("Split control and treatment before scaling.", style={"color": "#64748b", "fontSize": "13px"})]),
+                html.Div([html.Div("6", className="utility-step-number-v3"), html.Strong("Export + guardrail"), html.Div("Export audience only after risk review.", style={"color": "#64748b", "fontSize": "13px"})]),
+            ],
+            style={"display": "grid", "gridTemplateColumns": "repeat(6, minmax(0, 1fr))", "gap": "12px"},
+        )
+
+    return html.Details(
+        open=True,
+        className="hub-utility-page-v3",
+        children=[
+            html.Summary(
+                children=[
+                    html.Span(eyebrow, className="utility-eyebrow-v3"),
+                    html.Span(title, className="utility-title-v3"),
+                    html.Span("click to collapse", className="utility-collapse-v3"),
+                ],
+                className="hub-utility-summary-v3",
+            ),
+            html.Div(body, className="hub-utility-body-v3"),
+        ],
+    )
+
+
 app.layout = html.Div(
+    id="app-root",
+    className="app-shell-v3",
     children=[
         dcc.Store(id="active-customer-data-store", storage_type="memory"),
         dcc.Store(id="active-data-mode-store", storage_type="memory", data={"mode": "synthetic", "rows": 0, "filename": "synthetic_demo_portfolio"}),
+
         html.Div(
+            className="hub-utility-bar-v3",
+            children=[
+                html.Div(
+                    children=[
+                        html.Div("Credit Growth Decision Hub", className="hub-brand-title-v3"),
+                        html.Div("Risk-aware card growth cockpit", className="hub-brand-subtitle-v3"),
+                    ],
+                    className="hub-brand-v3",
+                ),
+                html.Div(
+                    children=[
+                        html.Button("Dashboard", id="hub-open-dashboard", n_clicks=0, className="hub-top-link-v3 hub-top-button-v3 hub-top-active-v3"),
+                        html.Button("Upload Data", id="hub-open-upload", n_clicks=0, className="hub-top-link-v3 hub-top-link-primary-v3 hub-top-button-v3"),
+                        html.Button("How it works", id="hub-open-how", n_clicks=0, className="hub-top-link-v3 hub-top-button-v3"),
+                        html.Button("Guide", id="hub-open-guide", n_clicks=0, className="hub-top-link-v3 hub-top-button-v3"),
+                        html.Button("Voice", id="hub-open-voice", n_clicks=0, className="hub-top-link-v3 hub-top-button-v3", title="Voice guide placeholder for the accessibility layer"),
+                        html.Button("Profile", id="hub-open-profile", n_clicks=0, className="hub-top-link-v3 hub-top-button-v3", title="Profile placeholder"),
+                    ],
+                    className="hub-top-actions-v3",
+                ),
+            ],
+        ),
+        html.Div(id="hub-utility-page-container", className="hub-utility-page-container-v3"),
+
+        html.Div(
+            children=[
+                html.Div(
+                    className="upload-center-header-v3",
+                    children=[
+                        html.Div(
+                            children=[
+                                html.Div("UPLOAD CENTER", className="upload-center-eyebrow-v3"),
+                                html.H2("Upload customer data", className="upload-center-title-v3"),
+                                html.P(
+                                    "Load a CSV or Excel customer file, validate required fields, preview the data, and make it the active master portfolio for every dashboard page.",
+                                    className="upload-center-copy-v3",
+                                ),
+                            ],
+                        ),
+                        html.Button(
+                            "Back to Dashboard",
+                            id="hub-back-dashboard",
+                            n_clicks=0,
+                            className="upload-center-back-button-v3",
+                        ),
+                    ],
+                ),
+                create_data_source_center(),
+            ],
+            id="hub-upload-static-container",
+            className="hub-upload-static-container-v3 hidden-upload-dock-v3",
+        ),
+
+        html.Div(
+            className="hub-hero-v3",
             children=[
                 html.Div(
                     children=[
                         html.Div(
-                            "Credit Card Portfolio Analytics",
+                            "Credit Growth Decision Hub",
                             style={
                                 "textTransform": "uppercase",
                                 "letterSpacing": "1.5px",
@@ -4984,7 +5103,7 @@ app.layout = html.Div(
                             },
                         ),
                         html.H1(
-                            "Risk-Aware Credit Card Growth Decision Engine",
+                            "Safer card growth. Clear launch decisions.",
                             style={
                                 "fontSize": "42px",
                                 "lineHeight": "1.1",
@@ -4993,7 +5112,7 @@ app.layout = html.Div(
                             },
                         ),
                         html.P(
-                            "Identify which existing credit card customers to scale, test, protect, or block using segmentation, profitability, risk, and responsible-lending guardrails.",
+                            "Move from customer signals to responsible campaign decisions with one flow: upload, filter, segment, simulate, test, guardrail, and export.",
                             style={
                                 "fontSize": "17px",
                                 "lineHeight": "1.55",
@@ -5001,6 +5120,18 @@ app.layout = html.Div(
                                 "maxWidth": "980px",
                                 "marginTop": "14px",
                             },
+                        ),
+                        html.Div(
+                            className="hub-flow-rail-v3",
+                            children=[
+                                html.Div("Data", className="hub-flow-chip-v3"),
+                                html.Div("Risk", className="hub-flow-chip-v3"),
+                                html.Div("Segment", className="hub-flow-chip-v3"),
+                                html.Div("Campaign", className="hub-flow-chip-v3"),
+                                html.Div("Test", className="hub-flow-chip-v3"),
+                                html.Div("Guardrails", className="hub-flow-chip-v3"),
+                                html.Div("Export", className="hub-flow-chip-v3"),
+                            ],
                         ),
                     ],
                     style={"flex": "1"},
@@ -5050,16 +5181,15 @@ app.layout = html.Div(
                 "marginBottom": "24px",
             },
         ),
-
-        create_data_source_center(),
+        html.Div(id="data-source-dock", className="data-source-dock-placeholder-v3"),
 
         create_filter_panel(),
 
-        create_workflow_guide(),
+        html.Div(create_workflow_guide(), id="workflow-guide-dock", className="workflow-guide-dock-v3 hidden-main-guide-v3"),
 
-        create_color_legend(),
+        html.Div(create_color_legend(), className="hidden-main-guide-v3"),
 
-        create_action_prompt_panel(),
+        html.Div(create_action_prompt_panel(), className="hidden-main-guide-v3"),
 
         html.Div(
             children=[
@@ -8894,6 +9024,124 @@ def download_ab_customer_list_excel(n_clicks, campaign_id, segment, audience_typ
 
     export_df = format_customer_explorer_preview(export_df, limit=len(export_df), include_email=True)
     return dcc.send_data_frame(export_df.to_excel, "ab_customer_list.xlsx", index=False, engine="openpyxl")
+
+
+
+@app.callback(
+    Output("app-root", "className"),
+    Output("hub-upload-static-container", "className"),
+    Output("hub-utility-page-container", "children"),
+    Output("hub-open-dashboard", "className"),
+    Output("hub-open-upload", "className"),
+    Output("hub-open-how", "className"),
+    Output("hub-open-guide", "className"),
+    Output("hub-open-voice", "className"),
+    Output("hub-open-profile", "className"),
+    Input("hub-open-dashboard", "n_clicks"),
+    Input("hub-open-upload", "n_clicks"),
+    Input("hub-back-dashboard", "n_clicks"),
+    Input("hub-open-how", "n_clicks"),
+    Input("hub-open-guide", "n_clicks"),
+    Input("hub-open-voice", "n_clicks"),
+    Input("hub-open-profile", "n_clicks"),
+    prevent_initial_call=True,
+)
+def route_top_utility(dashboard_clicks, upload_clicks, back_clicks, how_clicks, guide_clicks, voice_clicks, profile_clicks):
+    trigger = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else ""
+
+    base = "hub-top-link-v3 hub-top-button-v3"
+    upload_base = "hub-top-link-v3 hub-top-link-primary-v3 hub-top-button-v3"
+    active = " hub-top-active-v3"
+
+    dashboard_class = base
+    upload_class = upload_base
+    how_class = base
+    guide_class = base
+    voice_class = base
+    profile_class = base
+
+    if trigger == "hub-open-upload":
+        upload_class = upload_base + active
+        return (
+            "app-shell-v3 hub-upload-mode-v3",
+            "hub-upload-static-container-v3 is-open",
+            None,
+            dashboard_class,
+            upload_class,
+            how_class,
+            guide_class,
+            voice_class,
+            profile_class,
+        )
+
+    if trigger == "hub-open-how":
+        how_class = base + active
+        return (
+            "app-shell-v3 hub-info-mode-v3",
+            "hub-upload-static-container-v3 hidden-upload-dock-v3",
+            create_hub_utility_page("how"),
+            dashboard_class,
+            upload_class,
+            how_class,
+            guide_class,
+            voice_class,
+            profile_class,
+        )
+
+    if trigger == "hub-open-guide":
+        guide_class = base + active
+        return (
+            "app-shell-v3 hub-info-mode-v3",
+            "hub-upload-static-container-v3 hidden-upload-dock-v3",
+            create_hub_utility_page("guide"),
+            dashboard_class,
+            upload_class,
+            how_class,
+            guide_class,
+            voice_class,
+            profile_class,
+        )
+
+    if trigger == "hub-open-voice":
+        voice_class = base + active
+        return (
+            "app-shell-v3 hub-info-mode-v3",
+            "hub-upload-static-container-v3 hidden-upload-dock-v3",
+            create_hub_utility_page("voice"),
+            dashboard_class,
+            upload_class,
+            how_class,
+            guide_class,
+            voice_class,
+            profile_class,
+        )
+
+    if trigger == "hub-open-profile":
+        profile_class = base + active
+        return (
+            "app-shell-v3 hub-info-mode-v3",
+            "hub-upload-static-container-v3 hidden-upload-dock-v3",
+            create_hub_utility_page("profile"),
+            dashboard_class,
+            upload_class,
+            how_class,
+            guide_class,
+            voice_class,
+            profile_class,
+        )
+
+    dashboard_class = base + active
+    return (
+        "app-shell-v3",
+        "hub-upload-static-container-v3 hidden-upload-dock-v3",
+        None,
+        dashboard_class,
+        upload_class,
+        how_class,
+        guide_class,
+        voice_class,
+        profile_class,
+    )
 
 
 @app.callback(
