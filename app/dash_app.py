@@ -4324,15 +4324,45 @@ def build_ab_test_planner_layout() -> html.Div:
     return html.Div(
         children=[
             create_tab_intro(
-                "A/B Test Planner",
-                "Use this section to design a controlled experiment before scaling a campaign. It focuses on test population, control/treatment split, test duration, expected responders, and whether the test is powered enough to support a rollout decision.",
+                "Experiment Design Lab",
+                "Use this lab to design a controlled A/B test before scaling a campaign. It sizes the audience, splits control and treatment, estimates incremental response, and defines the rule for whether the campaign should scale.",
+            ),
+
+            html.Div(
+                children=[
+                    html.Div(
+                        "EXPERIMENT WORKFLOW",
+                        style={"fontSize": "12px", "fontWeight": "900", "letterSpacing": "0.12em", "color": "#2563eb", "marginBottom": "8px"},
+                    ),
+                    html.H3(
+                        "Design the test before you scale the offer",
+                        style={"margin": "0 0 10px 0", "fontSize": "22px", "fontWeight": "900", "color": COLORS["text"]},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div([html.Strong("1. Pick audience"), html.Div("Campaign + segment.", style={"color": COLORS["muted"], "fontSize": "13px"})]),
+                            html.Div([html.Strong("2. Set effect"), html.Div("Baseline response + expected lift.", style={"color": COLORS["muted"], "fontSize": "13px"})]),
+                            html.Div([html.Strong("3. Split exposure"), html.Div("Control vs treatment.", style={"color": COLORS["muted"], "fontSize": "13px"})]),
+                            html.Div([html.Strong("4. Launch rule"), html.Div("Scale only if lift wins cleanly.", style={"color": COLORS["muted"], "fontSize": "13px"})]),
+                        ],
+                        style={"display": "grid", "gridTemplateColumns": "repeat(4, minmax(0, 1fr))", "gap": "12px"},
+                    ),
+                ],
+                style={
+                    "backgroundColor": COLORS["card"],
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "18px",
+                    "padding": "18px 20px",
+                    "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                    "marginBottom": "18px",
+                },
             ),
 
             html.Div(
                 children=[
                     html.Div(
                         children=[
-                            html.H3("Experiment Setup", style={"marginTop": "0"}),
+                            html.H3("Experiment Setup Console", style={"marginTop": "0"}),
 
                             html.Label("Campaign", style={"fontWeight": "800"}),
                             dcc.Dropdown(
@@ -4424,6 +4454,49 @@ def build_ab_test_planner_layout() -> html.Div:
                                 marks={2: "2w", 4: "4w", 6: "6w", 8: "8w", 12: "12w"},
                                 tooltip={"placement": "bottom", "always_visible": False},
                             ),
+                            html.Div(
+                                children=[
+                                    html.Div(
+                                        "HOW TO READ THIS TEST",
+                                        style={
+                                            "fontSize": "12px",
+                                            "fontWeight": "900",
+                                            "letterSpacing": "0.10em",
+                                            "color": "#2563eb",
+                                            "textTransform": "uppercase",
+                                            "marginBottom": "8px",
+                                        },
+                                    ),
+                                    html.Div(
+                                        children=[
+                                            html.Div([html.Strong("Control"), html.Div("Holds back customers to measure baseline behavior.", style={"color": COLORS["muted"], "fontSize": "13px"})]),
+                                            html.Div([html.Strong("Treatment"), html.Div("Receives the new campaign offer.", style={"color": COLORS["muted"], "fontSize": "13px"})]),
+                                            html.Div([html.Strong("Lift"), html.Div("Extra response needed before scaling.", style={"color": COLORS["muted"], "fontSize": "13px"})]),
+                                        ],
+                                        style={
+                                            "display": "grid",
+                                            "gridTemplateColumns": "repeat(3, minmax(0, 1fr))",
+                                            "gap": "10px",
+                                        },
+                                    ),
+                                    html.Div(
+                                        "The planner does not approve a campaign just because response is higher. It requires enough audience, a clean split, measurable lift, and guardrail review before rollout.",
+                                        style={
+                                            "marginTop": "12px",
+                                            "fontSize": "13px",
+                                            "lineHeight": "1.45",
+                                            "color": COLORS["muted"],
+                                        },
+                                    ),
+                                ],
+                                style={
+                                    "backgroundColor": "#f8fafc",
+                                    "border": f"1px solid {COLORS['border']}",
+                                    "borderRadius": "16px",
+                                    "padding": "14px",
+                                    "marginTop": "22px",
+                                },
+                            ),
                         ],
                         style={
                             "backgroundColor": COLORS["card"],
@@ -4436,8 +4509,53 @@ def build_ab_test_planner_layout() -> html.Div:
 
                     html.Div(
                         children=[
-                            html.H3("Experiment Design Output", style={"marginTop": "0"}),
+                            html.H3("Experiment Readout", style={"marginTop": "0"}),
                             html.Div(id="ab-output"),
+                            html.Div(
+                                children=[
+                                    html.Div(
+                                        "Next actions",
+                                        style={
+                                            "fontSize": "12px",
+                                            "fontWeight": "900",
+                                            "letterSpacing": "0.10em",
+                                            "color": COLORS["muted"],
+                                            "textTransform": "uppercase",
+                                            "marginBottom": "10px",
+                                        },
+                                    ),
+                                    html.Div(
+                                        children=[
+                                            html.Button(
+                                                "Open Customer 360",
+                                                id="cta-ab-customer360",
+                                                n_clicks=0,
+                                                style={"border": "none", "borderRadius": "12px", "padding": "11px 15px", "backgroundColor": "#2563eb", "color": "white", "fontWeight": "900", "cursor": "pointer"},
+                                            ),
+                                            html.Button(
+                                                "Open Audience Explorer",
+                                                id="cta-ab-audience",
+                                                n_clicks=0,
+                                                style={"border": "none", "borderRadius": "12px", "padding": "11px 15px", "backgroundColor": "#16a34a", "color": "white", "fontWeight": "900", "cursor": "pointer"},
+                                            ),
+                                            html.Button(
+                                                "Review Guardrails",
+                                                id="cta-ab-guardrails",
+                                                n_clicks=0,
+                                                style={"border": "none", "borderRadius": "12px", "padding": "11px 15px", "backgroundColor": "#dc2626", "color": "white", "fontWeight": "900", "cursor": "pointer"},
+                                            ),
+                                        ],
+                                        style={"display": "flex", "gap": "10px", "flexWrap": "wrap"},
+                                    ),
+                                ],
+                                style={
+                                    "backgroundColor": "#f8fafc",
+                                    "border": f"1px solid {COLORS['border']}",
+                                    "borderRadius": "16px",
+                                    "padding": "14px",
+                                    "marginTop": "14px",
+                                },
+                            ),
                         ],
                         style={
                             "backgroundColor": COLORS["card"],
@@ -4450,8 +4568,111 @@ def build_ab_test_planner_layout() -> html.Div:
                 ],
                 style={
                     "display": "grid",
-                    "gridTemplateColumns": "1fr",
+                    "gridTemplateColumns": "0.76fr 1.24fr",
                     "gap": "18px",
+                },
+            ),
+
+            html.Div(
+                children=[
+                    html.Div(
+                        "A/B AUDIENCE EXPORT CENTER",
+                        style={
+                            "fontSize": "12px",
+                            "fontWeight": "900",
+                            "letterSpacing": "0.12em",
+                            "color": "#2563eb",
+                            "marginBottom": "8px",
+                        },
+                    ),
+                    html.H3(
+                        "Preview and export the test audience",
+                        style={"margin": "0 0 8px 0", "fontSize": "22px", "fontWeight": "900", "color": COLORS["text"]},
+                    ),
+                    html.P(
+                        "Use this only after the experiment design looks reasonable. The preview is capped for review; CSV and Excel exports include the full selected A/B audience.",
+                        style={"margin": "0 0 14px 0", "color": COLORS["muted"], "lineHeight": "1.45"},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div(
+                                children=[
+                                    html.Label("Audience type", style={"fontWeight": "800", "marginBottom": "6px", "display": "block"}),
+                                    dcc.Dropdown(
+                                        id="ab-audience-type",
+                                        options=[
+                                            {"label": "Eligible customers only", "value": "Eligible"},
+                                            {"label": "Scale customers", "value": "Scale"},
+                                            {"label": "Test customers", "value": "Test"},
+                                            {"label": "Blocked customers", "value": "Blocked"},
+                                        ],
+                                        value="Eligible",
+                                        clearable=False,
+                                    ),
+                                ],
+                                style={"minWidth": "240px", "flex": "1"},
+                            ),
+                            html.Div(
+                                children=[
+                                    html.Button(
+                                        "Export CSV",
+                                        id="download-ab-customer-list-button",
+                                        n_clicks=0,
+                                        style={"border": "none", "borderRadius": "12px", "padding": "11px 15px", "backgroundColor": "#2563eb", "color": "white", "fontWeight": "900", "cursor": "pointer"},
+                                    ),
+                                    html.Button(
+                                        "Export Excel",
+                                        id="download-ab-customer-list-excel-button",
+                                        n_clicks=0,
+                                        style={"border": "none", "borderRadius": "12px", "padding": "11px 15px", "backgroundColor": "#16a34a", "color": "white", "fontWeight": "900", "cursor": "pointer"},
+                                    ),
+                                    dcc.Download(id="download-ab-customer-list"),
+                                    dcc.Download(id="download-ab-customer-list-excel"),
+                                ],
+                                style={"display": "flex", "gap": "10px", "alignItems": "end", "flexWrap": "wrap"},
+                            ),
+                        ],
+                        style={"display": "flex", "gap": "14px", "alignItems": "end", "flexWrap": "wrap", "marginBottom": "14px"},
+                    ),
+                    html.Div(id="ab-customer-export-summary"),
+                    dash_table.DataTable(
+                        id="ab-customer-list-table",
+                        columns=[],
+                        data=[],
+                        page_size=10,
+                        fixed_rows={"headers": True},
+                        style_table={
+                            "overflowX": "auto",
+                            "overflowY": "auto",
+                            "maxHeight": "460px",
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderRadius": "14px",
+                        },
+                        style_cell={
+                            "fontFamily": "Arial",
+                            "fontSize": "13px",
+                            "padding": "10px",
+                            "textAlign": "left",
+                            "whiteSpace": "normal",
+                            "height": "auto",
+                            "minWidth": "110px",
+                            "maxWidth": "220px",
+                        },
+                        style_header={
+                            "backgroundColor": "#f8fafc",
+                            "fontWeight": "900",
+                            "color": COLORS["muted"],
+                            "borderBottom": f"1px solid {COLORS['border']}",
+                        },
+                    ),
+                ],
+                style={
+                    "backgroundColor": COLORS["card"],
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "18px",
+                    "padding": "22px",
+                    "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                    "marginTop": "18px",
                 },
             ),
         ]
@@ -8068,11 +8289,12 @@ def update_ab_test_planner(
     active_data,
 ):
     try:
+        import math
+
         master_df = get_active_customer_features(active_data)
 
         safe_segment = segment or "All Segments"
 
-        # If uploaded data is active and the selected segment no longer exists, fall back to All Segments.
         if (
             safe_segment != "All Segments"
             and "customer_segment" in master_df.columns
@@ -8120,7 +8342,7 @@ def update_ab_test_planner(
         lift_pp = float(lift_pp or 0)
         test_population = int(test_population or 0)
         test_split = parse_test_split_value(test_split)
-        test_duration = int(test_duration or 14)
+        test_duration = int(test_duration or 6)
 
         available_customers = int(len(audience_df))
         planned_population = min(test_population, available_customers) if test_population > 0 else available_customers
@@ -8128,39 +8350,120 @@ def update_ab_test_planner(
         treatment_customers = int(round(planned_population * test_split / 100))
         control_customers = planned_population - treatment_customers
 
-        expected_control_responses = control_customers * (baseline_rate_percent / 100)
-        expected_treatment_responses = treatment_customers * ((baseline_rate_percent + lift_pp) / 100)
-        incremental_responses = expected_treatment_responses - (treatment_customers * baseline_rate_percent / 100)
+        baseline_rate = max(0.0001, min(0.95, baseline_rate_percent / 100))
+        treatment_rate = max(0.0001, min(0.95, (baseline_rate_percent + lift_pp) / 100))
+        lift_rate = max(0.0, treatment_rate - baseline_rate)
 
-        ready = planned_population >= 100 and treatment_customers > 0 and control_customers > 0
-        readiness = "Ready to Test" if ready else "Small Sample / Directional Only"
-        accent = "#16a34a" if ready else "#f97316"
+        expected_control_responses = control_customers * baseline_rate
+        expected_treatment_responses = treatment_customers * treatment_rate
+        expected_incremental_responses = treatment_customers * lift_rate
+
+        standard_error = 0
+        if control_customers > 0 and treatment_customers > 0:
+            standard_error = math.sqrt(
+                (baseline_rate * (1 - baseline_rate) / control_customers)
+                + (treatment_rate * (1 - treatment_rate) / treatment_customers)
+            )
+
+        mde_pp = (1.96 * standard_error * 100) if standard_error > 0 else 0
+        signal_ratio = (lift_pp / mde_pp) if mde_pp > 0 else 0
+
+        audience_ready = planned_population >= 300 and control_customers >= 100 and treatment_customers >= 100
+        split_balanced = 35 <= test_split <= 65
+        signal_ready = signal_ratio >= 1
+
+        if audience_ready and signal_ready:
+            readiness = "Ready to run"
+            accent = "#16a34a"
+            recommendation_detail = "The planned test has enough audience and the expected lift is large enough to be meaningfully measured."
+            next_rule = "Run the test, then scale only if treatment beats control and guardrails stay clean."
+        elif audience_ready:
+            readiness = "Directional test"
+            accent = "#f97316"
+            recommendation_detail = "The audience size is usable, but the expected lift may be hard to separate from noise."
+            next_rule = "Run as a learning test, but do not scale broadly unless results are clearly stronger than expected."
+        else:
+            readiness = "Needs larger sample"
+            accent = "#dc2626"
+            recommendation_detail = "The planned audience or split is too small for a confident rollout decision."
+            next_rule = "Increase the test audience, use a more balanced split, or choose a broader eligible campaign audience."
+
+        split_fig = go.Figure()
+        split_fig.add_trace(
+            go.Bar(
+                y=["A/B audience"],
+                x=[control_customers],
+                name="Control",
+                orientation="h",
+                marker_color="#94a3b8",
+                text=[f"Control {control_customers:,}"],
+                textposition="inside",
+            )
+        )
+        split_fig.add_trace(
+            go.Bar(
+                y=["A/B audience"],
+                x=[treatment_customers],
+                name="Treatment",
+                orientation="h",
+                marker_color="#2563eb",
+                text=[f"Treatment {treatment_customers:,}"],
+                textposition="inside",
+            )
+        )
+        split_fig.update_layout(
+            title="Control vs Treatment Split",
+            barmode="stack",
+            height=230,
+            margin={"l": 35, "r": 25, "t": 55, "b": 35},
+            paper_bgcolor="white",
+            plot_bgcolor="white",
+            font={"family": "Arial", "size": 12, "color": COLORS["text"]},
+            xaxis_title="Customers",
+            yaxis_title="",
+            legend_title="Group",
+        )
+
+        def gate_card(title, status, detail, color):
+            return html.Div(
+                children=[
+                    html.Div(title, style={"fontSize": "12px", "fontWeight": "900", "color": COLORS["muted"], "textTransform": "uppercase"}),
+                    html.H4(status, style={"margin": "6px 0 4px 0", "fontSize": "18px", "fontWeight": "900", "color": color}),
+                    html.Div(detail, style={"fontSize": "13px", "lineHeight": "1.4", "color": COLORS["muted"]}),
+                ],
+                style={
+                    "backgroundColor": "#f8fafc",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "14px",
+                    "padding": "14px",
+                },
+            )
 
         return html.Div(
             children=[
                 html.Div(
                     children=[
+                        html.Div("Experiment readiness", style={"fontSize": "13px", "fontWeight": "900", "color": COLORS["muted"], "textTransform": "uppercase"}),
+                        html.H2(readiness, style={"margin": "6px 0 4px 0", "fontSize": "30px", "fontWeight": "900", "color": accent}),
+                        html.P(recommendation_detail, style={"margin": "0", "color": COLORS["muted"], "lineHeight": "1.45"}),
                         html.Div(
-                            "A/B Test Readiness",
+                            children=[
+                                html.Strong("Audience: "),
+                                f"{planned_population:,} of {available_customers:,} eligible customers from {safe_segment}. ",
+                                html.Strong("Duration: "),
+                                f"{test_duration} weeks.",
+                            ],
                             style={
+                                "marginTop": "12px",
+                                "backgroundColor": "#f8fafc",
+                                "border": f"1px solid {COLORS['border']}",
+                                "borderLeft": f"5px solid {accent}",
+                                "borderRadius": "12px",
+                                "padding": "12px",
                                 "fontSize": "13px",
-                                "fontWeight": "900",
-                                "color": COLORS["muted"],
-                                "textTransform": "uppercase",
+                                "lineHeight": "1.45",
+                                "color": COLORS["text"],
                             },
-                        ),
-                        html.H2(
-                            readiness,
-                            style={
-                                "margin": "6px 0 4px 0",
-                                "fontSize": "28px",
-                                "fontWeight": "900",
-                                "color": accent,
-                            },
-                        ),
-                        html.P(
-                            f"The planner is using {safe_segment}. Uploaded files automatically become the active master dataset.",
-                            style={"margin": "0", "color": COLORS["muted"], "lineHeight": "1.45"},
                         ),
                     ],
                     style={
@@ -8173,13 +8476,56 @@ def update_ab_test_planner(
                 ),
                 html.Div(
                     children=[
-                        create_kpi_card("Available Audience", f"{available_customers:,}", "From active master dataset", "#2563eb"),
-                        create_kpi_card("Planned Test Size", f"{planned_population:,}", f"{test_duration} week test window", "#0ea5e9"),
+                        create_kpi_card("Available Audience", f"{available_customers:,}", "Eligible customers", "#2563eb"),
+                        create_kpi_card("Planned Test Size", f"{planned_population:,}", f"{test_duration} week window", "#0ea5e9"),
                         create_kpi_card("Control / Treatment", f"{control_customers:,} / {treatment_customers:,}", f"{100 - test_split:.0f}% / {test_split:.0f}% split", "#7c3aed"),
-                        create_kpi_card("Expected Incremental Responses", f"{incremental_responses:,.1f}", f"+{lift_pp:.1f} pp lift assumption", "#16a34a"),
-                        create_kpi_card("Decision Gate", "Scale if lift wins", "Scale only if risk guardrails remain clean", "#111827"),
+                        create_kpi_card("Expected Incremental Responses", f"{expected_incremental_responses:,.1f}", f"+{lift_pp:.1f} pp treatment lift", "#16a34a"),
+                        create_kpi_card("Detectable Lift Check", f"{mde_pp:.1f} pp", "Approx. minimum measurable lift", "#f97316"),
                     ],
-                    style={"display": "grid", "gridTemplateColumns": "repeat(5, 1fr)", "gap": "14px"},
+                    style={"display": "grid", "gridTemplateColumns": "repeat(auto-fit, minmax(165px, 1fr))", "gap": "14px", "marginBottom": "14px"},
+                ),
+                html.Div(
+                    children=[
+                        gate_card("Audience gate", "Pass" if audience_ready else "Too small", f"{planned_population:,} planned customers.", "#16a34a" if audience_ready else "#dc2626"),
+                        gate_card("Split gate", "Balanced" if split_balanced else "Exposure-limited", f"{control_customers:,} control and {treatment_customers:,} treatment.", "#16a34a" if split_balanced else "#f97316"),
+                        gate_card("Signal gate", "Measurable" if signal_ready else "Directional", f"Expected lift {lift_pp:.1f} pp vs approx. {mde_pp:.1f} pp detectable lift.", "#16a34a" if signal_ready else "#f97316"),
+                    ],
+                    style={"display": "grid", "gridTemplateColumns": "repeat(3, minmax(0, 1fr))", "gap": "12px", "marginBottom": "14px"},
+                ),
+                html.Div(
+                    children=[
+                        html.Div(
+                            "Experiment split",
+                            style={"fontSize": "12px", "fontWeight": "900", "letterSpacing": "0.10em", "color": "#2563eb", "textTransform": "uppercase", "marginBottom": "6px"},
+                        ),
+                        dcc.Graph(
+                            figure=split_fig,
+                            config={"displayModeBar": False},
+                            style={"height": "230px"},
+                        ),
+                    ],
+                    style={
+                        "backgroundColor": "#ffffff",
+                        "border": f"1px solid {COLORS['border']}",
+                        "borderRadius": "14px",
+                        "padding": "12px",
+                        "marginBottom": "14px",
+                    },
+                ),
+                html.Div(
+                    children=[
+                        html.Div("Launch rule", style={"fontSize": "12px", "fontWeight": "900", "letterSpacing": "0.10em", "color": accent, "textTransform": "uppercase", "marginBottom": "8px"}),
+                        html.Div(
+                            f"{next_rule} Expected control responses are {expected_control_responses:,.1f}; expected treatment responses are {expected_treatment_responses:,.1f}.",
+                            style={"fontSize": "14px", "lineHeight": "1.55", "color": COLORS["text"]},
+                        ),
+                    ],
+                    style={
+                        "backgroundColor": "#f8fafc",
+                        "border": f"1px solid {COLORS['border']}",
+                        "borderRadius": "14px",
+                        "padding": "14px",
+                    },
                 ),
             ]
         )
@@ -8234,7 +8580,7 @@ def update_ab_customer_export_preview(campaign_id, segment, audience_type, activ
         )
         return [], [], summary
 
-    preview_df = format_customer_explorer_preview(audience_df, limit=500)
+    preview_df = format_customer_explorer_preview(audience_df, limit=100)
     columns = [{"name": column, "id": column} for column in preview_df.columns]
 
     summary = html.Div(
@@ -8546,7 +8892,7 @@ def download_ab_customer_list_excel(n_clicks, campaign_id, segment, audience_typ
     if export_df.empty:
         raise PreventUpdate
 
-    export_df = format_customer_explorer_preview(export_df, limit=len(export_df))
+    export_df = format_customer_explorer_preview(export_df, limit=len(export_df), include_email=True)
     return dcc.send_data_frame(export_df.to_excel, "ab_customer_list.xlsx", index=False, engine="openpyxl")
 
 
@@ -8569,6 +8915,9 @@ def download_ab_customer_list_excel(n_clicks, campaign_id, segment, audience_typ
     Input("cta-scenario-ab", "n_clicks"),
     Input("cta-scenario-audience", "n_clicks"),
     Input("cta-scenario-guardrails", "n_clicks"),
+    Input("cta-ab-customer360", "n_clicks"),
+    Input("cta-ab-audience", "n_clicks"),
+    Input("cta-ab-guardrails", "n_clicks"),
     Input("cta-playbook-campaigns", "n_clicks"),
     Input("cta-playbook-scenario", "n_clicks"),
     Input("cta-playbook-audience", "n_clicks"),
@@ -8600,6 +8949,9 @@ def navigate_from_dashboard_guides(
     cta_scenario_ab,
     cta_scenario_audience,
     cta_scenario_guardrails,
+    cta_ab_customer360,
+    cta_ab_audience,
+    cta_ab_guardrails,
     cta_playbook_campaigns,
     cta_playbook_scenario,
     cta_playbook_audience,
@@ -8657,6 +9009,9 @@ def navigate_from_dashboard_guides(
         "cta-scenario-ab": ("decision-workbench", "ab-test-planner"),
         "cta-scenario-audience": ("decision-workbench", "customer-explorer"),
         "cta-scenario-guardrails": ("guardrails", "customer-lookup"),
+        "cta-ab-customer360": ("decision-workbench", "customer-lookup"),
+        "cta-ab-audience": ("decision-workbench", "customer-explorer"),
+        "cta-ab-guardrails": ("guardrails", "customer-lookup"),
 
         "cta-playbook-campaigns": ("campaigns-offers", "customer-lookup"),
         "cta-playbook-scenario": ("decision-workbench", "scenario-simulator"),
