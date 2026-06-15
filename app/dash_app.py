@@ -3162,7 +3162,7 @@ def build_customer_lookup_layout() -> html.Div:
                 ],
                 style={
                     "display": "grid",
-                    "gridTemplateColumns": "0.9fr 1.1fr",
+                    "gridTemplateColumns": "0.70fr 1.30fr",
                     "gap": "16px",
                     "alignItems": "start",
                 },
@@ -4013,15 +4013,45 @@ def build_scenario_simulator_layout() -> html.Div:
     return html.Div(
         children=[
             create_tab_intro(
-                "Scenario Simulator",
-                "Use this section to test how campaign economics change when marketing cost, expected spend lift, and risk tolerance change. This helps decision-makers compare aggressive versus conservative rollout assumptions before launching a campaign.",
+                "Scenario Launch Lab",
+                "Use this lab to test campaign economics before rollout. Change cost, spend lift, and risk tolerance to see whether the campaign should scale, move into a controlled test, or stop before launch.",
+            ),
+
+            html.Div(
+                children=[
+                    html.Div(
+                        "SCENARIO WORKFLOW",
+                        style={"fontSize": "12px", "fontWeight": "900", "letterSpacing": "0.12em", "color": "#2563eb", "marginBottom": "8px"},
+                    ),
+                    html.H3(
+                        "From assumption to launch decision",
+                        style={"margin": "0 0 10px 0", "fontSize": "22px", "fontWeight": "900", "color": COLORS["text"]},
+                    ),
+                    html.Div(
+                        children=[
+                            html.Div([html.Strong("1. Select audience"), html.Div("Choose campaign and segment.", style={"color": COLORS["muted"], "fontSize": "13px"})]),
+                            html.Div([html.Strong("2. Set assumptions"), html.Div("Cost, lift, and risk limit.", style={"color": COLORS["muted"], "fontSize": "13px"})]),
+                            html.Div([html.Strong("3. Read decision gate"), html.Div("Scale, test, or stop.", style={"color": COLORS["muted"], "fontSize": "13px"})]),
+                            html.Div([html.Strong("4. Route next action"), html.Div("A/B test, export, or guardrails.", style={"color": COLORS["muted"], "fontSize": "13px"})]),
+                        ],
+                        style={"display": "grid", "gridTemplateColumns": "repeat(4, minmax(0, 1fr))", "gap": "12px"},
+                    ),
+                ],
+                style={
+                    "backgroundColor": COLORS["card"],
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "18px",
+                    "padding": "18px 20px",
+                    "boxShadow": "0 8px 22px rgba(15, 23, 42, 0.06)",
+                    "marginBottom": "18px",
+                },
             ),
 
             html.Div(
                 children=[
                     html.Div(
                         children=[
-                            html.H3("Scenario Inputs", style={"marginTop": "0"}),
+                            html.H3("Scenario Assumptions", style={"marginTop": "0"}),
 
                             html.Label("Campaign", style={"fontWeight": "800"}),
                             dcc.Dropdown(
@@ -4038,6 +4068,31 @@ def build_scenario_simulator_layout() -> html.Div:
                                     "fontSize": "13px",
                                     "color": COLORS["muted"],
                                     "lineHeight": "1.45",
+                                    "marginBottom": "18px",
+                                },
+                            ),
+
+                            html.Div(
+                                children=[
+                                    html.Div(
+                                        "Quick scenario presets",
+                                        style={"fontSize": "12px", "fontWeight": "900", "color": COLORS["muted"], "textTransform": "uppercase", "marginBottom": "8px"},
+                                    ),
+                                    html.Div(
+                                        children=[
+                                            html.Button("Conservative", id="scenario-preset-conservative", n_clicks=0, style={"border": "none", "borderRadius": "999px", "padding": "9px 12px", "fontWeight": "800", "backgroundColor": "#f0fdf4", "color": "#15803d", "cursor": "pointer"}),
+                                            html.Button("Balanced", id="scenario-preset-balanced", n_clicks=0, style={"border": "none", "borderRadius": "999px", "padding": "9px 12px", "fontWeight": "800", "backgroundColor": "#eff6ff", "color": "#1d4ed8", "cursor": "pointer"}),
+                                            html.Button("Aggressive", id="scenario-preset-aggressive", n_clicks=0, style={"border": "none", "borderRadius": "999px", "padding": "9px 12px", "fontWeight": "800", "backgroundColor": "#fff7ed", "color": "#c2410c", "cursor": "pointer"}),
+                                            html.Button("Risk-tight", id="scenario-preset-risk-tight", n_clicks=0, style={"border": "none", "borderRadius": "999px", "padding": "9px 12px", "fontWeight": "800", "backgroundColor": "#fef2f2", "color": "#b91c1c", "cursor": "pointer"}),
+                                        ],
+                                        style={"display": "flex", "gap": "8px", "flexWrap": "wrap"},
+                                    ),
+                                ],
+                                style={
+                                    "backgroundColor": "#f8fafc",
+                                    "border": f"1px solid {COLORS['border']}",
+                                    "borderRadius": "14px",
+                                    "padding": "12px",
                                     "marginBottom": "18px",
                                 },
                             ),
@@ -4087,6 +4142,58 @@ def build_scenario_simulator_layout() -> html.Div:
                                 marks={2: "2%", 5: "5%", 8: "8%", 12: "12%", 16: "16%", 20: "20%"},
                                 tooltip={"placement": "bottom", "always_visible": False},
                             ),
+                            html.Div(
+                                children=[
+                                    html.Div(
+                                        "HOW THE LAB READS THIS",
+                                        style={
+                                            "fontSize": "12px",
+                                            "fontWeight": "900",
+                                            "letterSpacing": "0.10em",
+                                            "color": "#2563eb",
+                                            "textTransform": "uppercase",
+                                            "marginBottom": "8px",
+                                        },
+                                    ),
+                                    html.Div(
+                                        children=[
+                                            html.Div([
+                                                html.Strong("Cost"),
+                                                html.Div("Higher cost raises the break-even lift.", style={"color": COLORS["muted"], "fontSize": "13px"}),
+                                            ]),
+                                            html.Div([
+                                                html.Strong("Lift"),
+                                                html.Div("Higher lift increases projected margin.", style={"color": COLORS["muted"], "fontSize": "13px"}),
+                                            ]),
+                                            html.Div([
+                                                html.Strong("Risk limit"),
+                                                html.Div("Lower threshold makes approval stricter.", style={"color": COLORS["muted"], "fontSize": "13px"}),
+                                            ]),
+                                        ],
+                                        style={
+                                            "display": "grid",
+                                            "gridTemplateColumns": "repeat(3, minmax(0, 1fr))",
+                                            "gap": "10px",
+                                        },
+                                    ),
+                                    html.Div(
+                                        "The lab compares incremental margin, campaign cost, average default risk, and audience size before recommending Scale, Test, or Do Not Launch.",
+                                        style={
+                                            "marginTop": "12px",
+                                            "fontSize": "13px",
+                                            "lineHeight": "1.45",
+                                            "color": COLORS["muted"],
+                                        },
+                                    ),
+                                ],
+                                style={
+                                    "backgroundColor": "#f8fafc",
+                                    "border": f"1px solid {COLORS['border']}",
+                                    "borderRadius": "16px",
+                                    "padding": "14px",
+                                    "marginTop": "22px",
+                                },
+                            ),
                         ],
                         style={
                             "backgroundColor": COLORS["card"],
@@ -4099,8 +4206,80 @@ def build_scenario_simulator_layout() -> html.Div:
 
                     html.Div(
                         children=[
-                            html.H3("Scenario Output", style={"marginTop": "0"}),
+                            html.H3("Launch Decision Readout", style={"marginTop": "0"}),
                             html.Div(id="scenario-output"),
+                            html.Div(
+                                children=[
+                                    html.Div(
+                                        "Next actions",
+                                        style={
+                                            "fontSize": "12px",
+                                            "fontWeight": "900",
+                                            "letterSpacing": "0.10em",
+                                            "color": COLORS["muted"],
+                                            "textTransform": "uppercase",
+                                            "marginBottom": "10px",
+                                        },
+                                    ),
+                                    html.Div(
+                                        children=[
+                                            html.Button(
+                                                "Design A/B Test",
+                                                id="cta-scenario-ab",
+                                                n_clicks=0,
+                                                style={
+                                                    "border": "none",
+                                                    "borderRadius": "12px",
+                                                    "padding": "11px 15px",
+                                                    "backgroundColor": "#7c3aed",
+                                                    "color": "white",
+                                                    "fontWeight": "900",
+                                                    "cursor": "pointer",
+                                                    "boxShadow": "0 8px 18px rgba(124, 58, 237, 0.18)",
+                                                },
+                                            ),
+                                            html.Button(
+                                                "Export Audience",
+                                                id="cta-scenario-audience",
+                                                n_clicks=0,
+                                                style={
+                                                    "border": "none",
+                                                    "borderRadius": "12px",
+                                                    "padding": "11px 15px",
+                                                    "backgroundColor": "#16a34a",
+                                                    "color": "white",
+                                                    "fontWeight": "900",
+                                                    "cursor": "pointer",
+                                                    "boxShadow": "0 8px 18px rgba(22, 163, 74, 0.18)",
+                                                },
+                                            ),
+                                            html.Button(
+                                                "Review Guardrails",
+                                                id="cta-scenario-guardrails",
+                                                n_clicks=0,
+                                                style={
+                                                    "border": "none",
+                                                    "borderRadius": "12px",
+                                                    "padding": "11px 15px",
+                                                    "backgroundColor": "#dc2626",
+                                                    "color": "white",
+                                                    "fontWeight": "900",
+                                                    "cursor": "pointer",
+                                                    "boxShadow": "0 8px 18px rgba(220, 38, 38, 0.18)",
+                                                },
+                                            ),
+                                        ],
+                                        style={"display": "flex", "gap": "10px", "flexWrap": "wrap"},
+                                    ),
+                                ],
+                                style={
+                                    "backgroundColor": "#f8fafc",
+                                    "border": f"1px solid {COLORS['border']}",
+                                    "borderRadius": "16px",
+                                    "padding": "14px",
+                                    "marginTop": "14px",
+                                },
+                            ),
                         ],
                         style={
                             "backgroundColor": COLORS["card"],
@@ -7518,8 +7697,30 @@ def update_customer_lookup(selected_rows, table_data, active_data):
     Output("scenario-spend-lift", "value"),
     Output("scenario-risk-threshold", "value"),
     Input("scenario-campaign", "value"),
+    Input("scenario-preset-conservative", "n_clicks"),
+    Input("scenario-preset-balanced", "n_clicks"),
+    Input("scenario-preset-aggressive", "n_clicks"),
+    Input("scenario-preset-risk-tight", "n_clicks"),
 )
-def sync_scenario_inputs_with_campaign(campaign_id: str):
+def sync_scenario_inputs_with_campaign(
+    campaign_id,
+    conservative_clicks,
+    balanced_clicks,
+    aggressive_clicks,
+    risk_tight_clicks,
+):
+    trigger = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else "scenario-campaign"
+
+    preset_values = {
+        "scenario-preset-conservative": (3, 4, 5),
+        "scenario-preset-balanced": (5, 8, 8),
+        "scenario-preset-aggressive": (12, 15, 12),
+        "scenario-preset-risk-tight": (5, 6, 3),
+    }
+
+    if trigger in preset_values:
+        return preset_values[trigger]
+
     if campaign_recommendations.empty or campaign_id in [None, "None"]:
         return 5, 8, 8
 
@@ -7535,7 +7736,6 @@ def sync_scenario_inputs_with_campaign(campaign_id: str):
     marketing_cost = int(round(float(campaign.get("cost_per_customer", 5))))
     spend_lift = int(round(float(campaign.get("expected_lift_pct", 0.08)) * 100))
 
-    # Conservative default by campaign risk sensitivity.
     risk_sensitivity = campaign.get("risk_sensitivity", "Medium")
     risk_threshold_map = {
         "Low": 10,
@@ -7590,6 +7790,18 @@ def update_scenario_simulator(
     spend_lift_percent = float(spend_lift_percent or 0)
     risk_threshold_percent = float(risk_threshold_percent or 0)
 
+    selected_campaign_name = "Selected campaign"
+    selected_campaign_type = "Campaign"
+    selected_campaign_decision = "Review"
+
+    if not campaign_recommendations.empty and campaign_id not in [None, "None"]:
+        selected_campaign = campaign_recommendations[campaign_recommendations["campaign_id"] == campaign_id]
+        if not selected_campaign.empty:
+            campaign_row = selected_campaign.iloc[0]
+            selected_campaign_name = str(campaign_row.get("campaign_name", selected_campaign_name))
+            selected_campaign_type = str(campaign_row.get("offer_type", selected_campaign_type))
+            selected_campaign_decision = str(campaign_row.get("recommended_rollout_decision", selected_campaign_decision))
+
     monthly_spend = pd.to_numeric(scenario_df.get("monthly_spend", 0), errors="coerce").fillna(0)
     risk_adjusted_profit = pd.to_numeric(scenario_df.get("risk_adjusted_profit", 0), errors="coerce").fillna(0)
     default_probability = pd.to_numeric(scenario_df.get("default_probability", 0), errors="coerce").fillna(0)
@@ -7605,30 +7817,115 @@ def update_scenario_simulator(
     total_campaign_cost = total_customers * marketing_cost
     net_incremental_value = incremental_margin - total_campaign_cost
     projected_profit = baseline_profit + net_incremental_value
+    scenario_roi = net_incremental_value / total_campaign_cost if total_campaign_cost else 0
 
-    risk_pass = avg_default_probability <= (risk_threshold_percent / 100 if risk_threshold_percent > 1 else risk_threshold_percent)
+    threshold_decimal = risk_threshold_percent / 100 if risk_threshold_percent > 1 else risk_threshold_percent
+    risk_pass = avg_default_probability <= threshold_decimal
     economics_pass = net_incremental_value > 0
+    audience_pass = total_customers >= 100
 
-    if risk_pass and economics_pass:
-        recommendation = "Scale"
-        recommendation_detail = "Economics are positive and the average default probability is within the selected risk threshold."
+    break_even_lift = (
+        (total_campaign_cost / (total_monthly_spend * assumed_margin_rate)) * 100
+        if total_monthly_spend > 0 and assumed_margin_rate > 0
+        else 0
+    )
+
+    if risk_pass and economics_pass and audience_pass:
+        recommendation = "Scale candidate"
+        engine_label = "Scale"
+        recommendation_detail = "The scenario has positive economics, enough audience size, and average risk is inside the selected threshold."
         accent = "#16a34a"
-    elif risk_pass and not economics_pass:
-        recommendation = "Test"
-        recommendation_detail = "Risk is acceptable, but economics are not strong enough for full rollout without an experiment."
+        next_move = "Move to A/B design or export a controlled launch audience after final guardrail review."
+        ctas = [
+            ("Design A/B Test", "cta-scenario-ab", "#7c3aed"),
+            ("Export Audience", "cta-scenario-audience", "#16a34a"),
+            ("Review Guardrails", "cta-scenario-guardrails", "#dc2626"),
+        ]
+    elif risk_pass and audience_pass:
+        recommendation = "Test before scaling"
+        engine_label = "Test"
+        recommendation_detail = "Risk is acceptable, but the economics are not strong enough for broad rollout without a controlled experiment."
         accent = "#2563eb"
+        next_move = "Use A/B Test Planner to validate lift before spending on a larger rollout."
+        ctas = [
+            ("Design A/B Test", "cta-scenario-ab", "#7c3aed"),
+            ("Export Audience", "cta-scenario-audience", "#16a34a"),
+            ("Review Guardrails", "cta-scenario-guardrails", "#dc2626"),
+        ]
     else:
-        recommendation = "Do Not Launch"
-        recommendation_detail = "Risk threshold is breached for this active audience."
+        recommendation = "Do not launch broadly"
+        engine_label = "Do Not Launch"
+        recommendation_detail = "The audience fails the current launch gate because risk, economics, or sample size is not acceptable."
         accent = "#dc2626"
+        next_move = "Tighten the audience, lower risk threshold, choose a safer campaign, or review Guardrails before any export."
+        ctas = [
+            ("Review Guardrails", "cta-scenario-guardrails", "#dc2626"),
+            ("Export Audience", "cta-scenario-audience", "#16a34a"),
+        ]
+
+    def gate_card(title, status, detail, color):
+        return html.Div(
+            children=[
+                html.Div(title, style={"fontSize": "12px", "fontWeight": "900", "color": COLORS["muted"], "textTransform": "uppercase"}),
+                html.H4(status, style={"margin": "6px 0 4px 0", "fontSize": "18px", "fontWeight": "900", "color": color}),
+                html.Div(detail, style={"fontSize": "13px", "lineHeight": "1.4", "color": COLORS["muted"]}),
+            ],
+            style={
+                "backgroundColor": "#f8fafc",
+                "border": f"1px solid {COLORS['border']}",
+                "borderRadius": "14px",
+                "padding": "14px",
+            },
+        )
+
+    economics_fig = go.Figure(
+        go.Waterfall(
+            name="Scenario economics",
+            orientation="v",
+            measure=["absolute", "relative", "relative", "total"],
+            x=["Baseline profit", "Incremental margin", "Campaign cost", "Projected profit"],
+            y=[baseline_profit, incremental_margin, -total_campaign_cost, projected_profit],
+            connector={"line": {"color": "#94a3b8"}},
+            increasing={"marker": {"color": "#16a34a"}},
+            decreasing={"marker": {"color": "#dc2626"}},
+            totals={"marker": {"color": "#2563eb"}},
+        )
+    )
+    economics_fig.update_layout(
+        title="Scenario Economics Bridge",
+        height=300,
+        margin={"l": 45, "r": 25, "t": 55, "b": 35},
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font={"family": "Arial", "size": 12, "color": COLORS["text"]},
+        yaxis_title="Dollars",
+        showlegend=False,
+    )
 
     return html.Div(
         children=[
             html.Div(
                 children=[
-                    html.Div("Scenario Recommendation", style={"fontSize": "13px", "fontWeight": "900", "color": COLORS["muted"], "textTransform": "uppercase"}),
-                    html.H2(recommendation, style={"margin": "6px 0 4px 0", "fontSize": "28px", "fontWeight": "900", "color": accent}),
+                    html.Div("Launch Recommendation", style={"fontSize": "13px", "fontWeight": "900", "color": COLORS["muted"], "textTransform": "uppercase"}),
+                    html.H2(recommendation, style={"margin": "6px 0 4px 0", "fontSize": "30px", "fontWeight": "900", "color": accent}),
                     html.P(recommendation_detail, style={"margin": "0", "color": COLORS["muted"], "lineHeight": "1.45"}),
+                    html.Div(
+                        children=[
+                            html.Strong("Campaign: "),
+                            f"{selected_campaign_name} • {selected_campaign_type} • Original engine view: {selected_campaign_decision}",
+                        ],
+                        style={
+                            "marginTop": "12px",
+                            "backgroundColor": "#f8fafc",
+                            "border": f"1px solid {COLORS['border']}",
+                            "borderLeft": f"5px solid {accent}",
+                            "borderRadius": "12px",
+                            "padding": "12px",
+                            "fontSize": "13px",
+                            "lineHeight": "1.45",
+                            "color": COLORS["text"],
+                        },
+                    ),
                 ],
                 style={
                     "backgroundColor": "#ffffff",
@@ -7640,13 +7937,80 @@ def update_scenario_simulator(
             ),
             html.Div(
                 children=[
-                    create_kpi_card("Audience Size", f"{total_customers:,}", "Active master dataset customers", "#2563eb"),
-                    create_kpi_card("Avg Default Probability", f"{avg_default_probability:.2%}", "Compared with risk threshold", "#dc2626" if not risk_pass else "#16a34a"),
-                    create_kpi_card("Incremental Spend", f"${incremental_spend:,.0f}", f"{spend_lift_percent:.1f}% lift assumption", "#0ea5e9"),
-                    create_kpi_card("Net Incremental Value", f"${net_incremental_value:,.0f}", "Margin minus campaign cost", "#16a34a" if economics_pass else "#f97316"),
-                    create_kpi_card("Projected Profit", f"${projected_profit:,.0f}", "Baseline risk-adjusted profit plus scenario value", "#7c3aed"),
+                    create_kpi_card("Audience Size", f"{total_customers:,}", f"{segment or 'All Segments'} audience", "#2563eb"),
+                    create_kpi_card("Net Incremental Value", f"${net_incremental_value:,.0f}", "Incremental margin minus campaign cost", "#16a34a" if economics_pass else "#f97316"),
+                    create_kpi_card("Scenario ROI", f"{scenario_roi:.1f}x", "Return per campaign dollar", "#7c3aed"),
+                    create_kpi_card("Avg Default Risk", f"{avg_default_probability:.2%}", f"Threshold: {risk_threshold_percent:.0f}%", "#16a34a" if risk_pass else "#dc2626"),
+                    create_kpi_card("Projected Profit", f"${projected_profit:,.0f}", "Baseline profit plus scenario value", "#0ea5e9"),
                 ],
-                style={"display": "grid", "gridTemplateColumns": "repeat(5, 1fr)", "gap": "14px"},
+                style={"display": "grid", "gridTemplateColumns": "repeat(auto-fit, minmax(165px, 1fr))", "gap": "14px", "marginBottom": "14px"},
+            ),
+            html.Div(
+                children=[
+                    gate_card("Risk gate", "Pass" if risk_pass else "Fail", f"Average default risk is {avg_default_probability:.2%}.", "#16a34a" if risk_pass else "#dc2626"),
+                    gate_card("Economics gate", "Positive" if economics_pass else "Needs test", f"Break-even spend lift is about {break_even_lift:.1f}%.", "#16a34a" if economics_pass else "#f97316"),
+                    gate_card("Audience gate", "Sufficient" if audience_pass else "Small sample", f"{total_customers:,} customers in the scenario audience.", "#16a34a" if audience_pass else "#f97316"),
+                ],
+                style={"display": "grid", "gridTemplateColumns": "repeat(3, minmax(0, 1fr))", "gap": "12px", "marginBottom": "14px"},
+            ),
+            html.Div(
+                children=[
+                    html.Div(
+                        "Economics bridge",
+                        style={
+                            "fontSize": "12px",
+                            "fontWeight": "900",
+                            "letterSpacing": "0.10em",
+                            "color": "#2563eb",
+                            "textTransform": "uppercase",
+                            "marginBottom": "6px",
+                        },
+                    ),
+                    dcc.Graph(
+                        figure=economics_fig,
+                        config={"displayModeBar": False},
+                        style={"height": "300px"},
+                    ),
+                ],
+                style={
+                    "backgroundColor": "#ffffff",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "14px",
+                    "padding": "12px",
+                    "marginBottom": "14px",
+                },
+            ),
+            html.Div(
+                children=[
+                    html.Div("Plain-English readout", style={"fontSize": "12px", "fontWeight": "900", "letterSpacing": "0.10em", "color": accent, "textTransform": "uppercase", "marginBottom": "8px"}),
+                    html.Div(
+                        f"{engine_label}: {next_move} The model assumes {spend_lift_percent:.1f}% spend lift, ${marketing_cost:.0f} cost per customer, "
+                        f"${incremental_margin:,.0f} incremental margin, and ${total_campaign_cost:,.0f} total campaign cost.",
+                        style={"fontSize": "14px", "lineHeight": "1.55", "color": COLORS["text"]},
+                    ),
+                ],
+                style={
+                    "backgroundColor": "#f8fafc",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "14px",
+                    "padding": "14px",
+                    "marginBottom": "14px",
+                },
+            ),
+            html.Div(
+                children=[
+                    html.Strong("Recommended next step: "),
+                    next_move,
+                ],
+                style={
+                    "fontSize": "13px",
+                    "lineHeight": "1.45",
+                    "color": COLORS["muted"],
+                    "backgroundColor": "#f8fafc",
+                    "border": f"1px solid {COLORS['border']}",
+                    "borderRadius": "12px",
+                    "padding": "10px",
+                },
             ),
         ]
     )
@@ -8202,6 +8566,9 @@ def download_ab_customer_list_excel(n_clicks, campaign_id, segment, audience_typ
     Input("cta-open-ab", "n_clicks"),
     Input("cta-open-audience", "n_clicks"),
     Input("cta-open-guardrails", "n_clicks"),
+    Input("cta-scenario-ab", "n_clicks"),
+    Input("cta-scenario-audience", "n_clicks"),
+    Input("cta-scenario-guardrails", "n_clicks"),
     Input("cta-playbook-campaigns", "n_clicks"),
     Input("cta-playbook-scenario", "n_clicks"),
     Input("cta-playbook-audience", "n_clicks"),
@@ -8230,6 +8597,9 @@ def navigate_from_dashboard_guides(
     cta_open_ab,
     cta_open_audience,
     cta_open_guardrails,
+    cta_scenario_ab,
+    cta_scenario_audience,
+    cta_scenario_guardrails,
     cta_playbook_campaigns,
     cta_playbook_scenario,
     cta_playbook_audience,
@@ -8284,6 +8654,9 @@ def navigate_from_dashboard_guides(
         "cta-open-ab": ("decision-workbench", "ab-test-planner"),
         "cta-open-audience": ("decision-workbench", "customer-explorer"),
         "cta-open-guardrails": ("guardrails", "customer-lookup"),
+        "cta-scenario-ab": ("decision-workbench", "ab-test-planner"),
+        "cta-scenario-audience": ("decision-workbench", "customer-explorer"),
+        "cta-scenario-guardrails": ("guardrails", "customer-lookup"),
 
         "cta-playbook-campaigns": ("campaigns-offers", "customer-lookup"),
         "cta-playbook-scenario": ("decision-workbench", "scenario-simulator"),
